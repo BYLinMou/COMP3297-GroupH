@@ -55,11 +55,12 @@ Base path: `/api/defects/`
 
 - Method: `GET`
 - Path: `/api/defects/`
+- Auth: required (`Session` or `Basic`)
 - Query params (all optional):
   - `status` (for example `New`, `Open`, `Assigned`, `Fixed`, `Resolved`)
   - `product_id`
-  - `owner_id`
-  - `developer_id`
+  - `owner_id` (must match logged-in Product Owner username)
+  - `developer_id` (must match logged-in Developer username)
 
 Response `200`:
 
@@ -87,6 +88,7 @@ Response `200`:
 - Method: `POST`
 - Path: `/api/defects/new/`
 - Content-Type: `application/json`
+- Auth: not required (external system endpoint)
 - Required fields:
   - `product_id`, `version`, `title`, `description`, `steps`, `tester_id`
 - Optional fields:
@@ -116,6 +118,7 @@ Responses:
 - Method: `POST`
 - Path: `/api/defects/<defect_id>/actions/`
 - Content-Type: `application/json`
+- Auth: required (`Session` or `Basic`)
 - Required field:
   - `action`
 
@@ -131,15 +134,15 @@ Supported `action` values:
 - `add_comment`
 
 Action-specific fields:
-- `accept_open`: `owner_id`, `severity` (`High|Medium|Low`), `priority` (`P1|P2|P3`), `backlog_ref` (optional)
-- `reject`: `owner_id`
-- `duplicate`: `owner_id`, `duplicate_of` (optional)
-- `take_ownership`: `developer_id`
-- `set_fixed`: `developer_id`, `fix_note` (optional)
-- `cannot_reproduce`: `developer_id`, `fix_note` (optional)
-- `set_resolved`: `owner_id`, `retest_note` (optional)
-- `reopen`: `owner_id`, `retest_note` (optional)
-- `add_comment`: `author`, `comment`
+- `accept_open`: `severity` (`High|Medium|Low`), `priority` (`P1|P2|P3`), `backlog_ref` (optional)
+- `reject`: no additional field
+- `duplicate`: `duplicate_of` (optional)
+- `take_ownership`: no additional field (assignee is current user)
+- `set_fixed`: `fix_note` (optional)
+- `cannot_reproduce`: `fix_note` (optional)
+- `set_resolved`: `retest_note` (optional)
+- `reopen`: `retest_note` (optional)
+- `add_comment`: `comment` (author is current user)
 
 Response `200`:
 
@@ -154,6 +157,43 @@ Response `200`:
 Error responses:
 - `400` invalid transition, invalid role/user, or validation error
 - `404` defect not found
+- `403` unauthenticated or unauthorized access
+
+## Demo Accounts (Auto-created)
+
+The system auto-creates Sprint 1 demo users and roles:
+
+- Product Owner: `owner-001`
+- Developers: `dev-001`, `dev-004`
+- Password (all): `Pass1234!`
+
+Use `/auth/` for sign in, then access owner/developer screens.
+
+## Initial Demo Data (Auto-seeded)
+
+After running `python manage.py migrate`, the app seeds initial data on first use
+(for example when opening `/`, `/auth/`, or any defects API endpoint).
+
+Seeded records include:
+
+- Roles: `owner`, `developer`
+- Product:
+  - `PRD-1007` (name: `BetaTrax Demo Product`, owner: `owner-001`)
+- Product developers:
+  - `dev-001`
+  - `dev-004`
+- Defect reports (inserted only when `DefectReport` table is empty):
+  - `BT-RP-2471` (`New`)
+  - `BT-RP-2462` (`Open`)
+  - `BT-RP-2440` (`Assigned`)
+  - `BT-RP-2421` (`Fixed`)
+  - `BT-RP-2475` (`Open`)
+  - `BT-RP-2476` (`Resolved`)
+
+Notes:
+
+- If there is already at least one defect report, seeded defect reports are not added again.
+- The seed helper is idempotent for roles, users, product, and team membership.
 
 ### Optional Email (Google SMTP) （Implementing）
 

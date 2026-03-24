@@ -1,9 +1,12 @@
 from typing import Any
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.mail import send_mail
 from django.utils import timezone
 
+from .authz import ActorContext, ROLE_DEVELOPER, ROLE_OWNER
 from .models import (
     DefectComment,
     DefectReport,
@@ -32,6 +35,7 @@ REQUIRED_CREATE_FIELDS = ("product_id", "version", "title", "description", "step
 
 
 def ensure_demo_seed() -> None:
+    _ensure_demo_users()
     product, _ = Product.objects.get_or_create(
         product_id="PRD-1007",
         defaults={"name": "BetaTrax Demo Product", "owner_id": "owner-001"},
@@ -98,10 +102,60 @@ def ensure_demo_seed() -> None:
             "description": "Recent updates are not searchable until a full reindex job runs.",
             "steps": "1) Update content\n2) Search with keyword\n3) No result",
         },
+        {
+            "report_id": "BT-RP-2475",
+            "title": "Notification badge count is off by one",
+            "version": "v1.4.3-beta",
+            "tester_id": "tester-031",
+            "tester_email": "tester31@example.com",
+            "status": DefectStatus.OPEN,
+            "severity": Severity.MEDIUM,
+            "priority": Priority.P2,
+            "backlog_ref": "BETA-312",
+            "description": "Header badge shows one extra unread item after viewing latest alert.",
+            "steps": "1) Open notifications\n2) Read newest alert\n3) Return to dashboard",
+        },
+        {
+            "report_id": "BT-RP-2476",
+            "title": "Dark text overlaps chart legend on small screens",
+            "version": "v1.4.3-beta",
+            "tester_id": "tester-044",
+            "status": DefectStatus.RESOLVED,
+            "severity": Severity.LOW,
+            "priority": Priority.P3,
+            "backlog_ref": "BETA-318",
+            "assignee_id": "dev-001",
+            "fix_note": "Adjusted legend spacing and font size breakpoints.",
+            "retest_note": "Verified on 390x844 viewport.",
+            "description": "Analytics chart legend overlaps labels in mobile layout.",
+            "steps": "1) Open analytics page on phone\n2) Switch to weekly chart\n3) Observe legend overlap",
+        },
     ]
 
     for row in seed_defects:
         DefectReport.objects.create(product=product, **row)
+
+
+def _ensure_demo_users() -> None:
+    owner_group, _ = Group.objects.get_or_create(name=ROLE_OWNER)
+    developer_group, _ = Group.objects.get_or_create(name=ROLE_DEVELOPER)
+    user_model = get_user_model()
+
+    demo_users = [
+        ("owner-001", "owner001@example.com", [owner_group]),
+        ("dev-001", "dev001@example.com", [developer_group]),
+        ("dev-004", "dev004@example.com", [developer_group]),
+    ]
+    for username, email, groups in demo_users:
+        user, created = user_model.objects.get_or_create(
+            username=username,
+            defaults={"email": email},
+        )
+        if created:
+            user.set_password("Pass1234!")
+            user.save(update_fields=["password"])
+        for group in groups:
+            user.groups.add(group)
 
 
 def next_report_id() -> str:
@@ -198,14 +252,15 @@ def _notify_status_change(defect: DefectReport) -> None:
     )
 
 
-def apply_action(defect: DefectReport, action: str, payload: dict[str, Any]) -> str:
+def apply_action(defect: DefectReport, action: str, payload: dict[str, Any], actor: ActorContext) -> str:
     current = defect.status
 
     if action == "accept_open":
         if current != DefectStatus.NEW:
             raise ValueError("Only New defects can be accepted.")
-        owner_id = (payload.get("owner_id") or "").strip() or defect.product.owner_id
-        if owner_id != defect.product.owner_id:
+        if not actor.is_owner:
+            raise ValueError("Only Product Owner role can accept this defect.")
+        if actor.actor_id != defect.product.owner_id:
             raise ValueError("Only the Product Owner can accept this defect.")
         severity = (payload.get("severity") or "").strip()
         priority = (payload.get("priority") or "").strip()
@@ -219,28 +274,30 @@ def apply_action(defect: DefectReport, action: str, payload: dict[str, Any]) -> 
         defect.status = DefectStatus.OPEN
         defect.decided_at = timezone.now()
         defect.save(update_fields=["severity", "priority", "backlog_ref", "status", "decided_at", "updated_at"])
-        _record_status_change(defect, current, defect.status, owner_id)
+        _record_status_change(defect, current, defect.status, actor.actor_id)
         _notify_status_change(defect)
         return "Defect accepted and moved to Open."
 
     if action == "reject":
         if current != DefectStatus.NEW:
             raise ValueError("Only New defects can be rejected.")
-        owner_id = (payload.get("owner_id") or "").strip() or defect.product.owner_id
-        if owner_id != defect.product.owner_id:
+        if not actor.is_owner:
+            raise ValueError("Only Product Owner role can reject this defect.")
+        if actor.actor_id != defect.product.owner_id:
             raise ValueError("Only the Product Owner can reject this defect.")
         defect.status = DefectStatus.REJECTED
         defect.decided_at = timezone.now()
         defect.save(update_fields=["status", "decided_at", "updated_at"])
-        _record_status_change(defect, current, defect.status, owner_id)
+        _record_status_change(defect, current, defect.status, actor.actor_id)
         _notify_status_change(defect)
         return "Defect moved to Rejected."
 
     if action == "duplicate":
         if current != DefectStatus.NEW:
             raise ValueError("Only New defects can be marked duplicate.")
-        owner_id = (payload.get("owner_id") or "").strip() or defect.product.owner_id
-        if owner_id != defect.product.owner_id:
+        if not actor.is_owner:
+            raise ValueError("Only Product Owner role can mark duplicate.")
+        if actor.actor_id != defect.product.owner_id:
             raise ValueError("Only the Product Owner can mark duplicate.")
         duplicate_of = (payload.get("duplicate_of") or "").strip()
         if duplicate_of and duplicate_of != defect.report_id:
@@ -251,88 +308,92 @@ def apply_action(defect: DefectReport, action: str, payload: dict[str, Any]) -> 
         defect.status = DefectStatus.DUPLICATE
         defect.decided_at = timezone.now()
         defect.save(update_fields=["duplicate_of", "status", "decided_at", "updated_at"])
-        _record_status_change(defect, current, defect.status, owner_id)
+        _record_status_change(defect, current, defect.status, actor.actor_id)
         _notify_status_change(defect)
         return "Defect moved to Duplicate."
 
     if action == "take_ownership":
         if current not in {DefectStatus.OPEN, DefectStatus.REOPENED}:
             raise ValueError("Only Open/Reopened defects can be assigned.")
-        developer_id = (payload.get("developer_id") or "").strip()
-        if not developer_id:
-            raise ValueError("Developer ID is required.")
-        if not ProductDeveloper.objects.filter(product=defect.product, developer_id=developer_id).exists():
+        if not actor.is_developer:
+            raise ValueError("Only Developer role can take ownership.")
+        if not ProductDeveloper.objects.filter(product=defect.product, developer_id=actor.actor_id).exists():
             raise ValueError("Only developers on the product team may take ownership.")
-        defect.assignee_id = developer_id
+        defect.assignee_id = actor.actor_id
         defect.status = DefectStatus.ASSIGNED
         defect.decided_at = timezone.now()
         defect.save(update_fields=["assignee_id", "status", "decided_at", "updated_at"])
-        _record_status_change(defect, current, defect.status, developer_id)
+        _record_status_change(defect, current, defect.status, actor.actor_id)
         _notify_status_change(defect)
-        return f"Assigned to {developer_id}."
+        return f"Assigned to {actor.actor_id}."
 
     if action == "set_fixed":
         if current != DefectStatus.ASSIGNED:
             raise ValueError("Only Assigned defects can be set to Fixed.")
-        developer_id = (payload.get("developer_id") or "").strip() or defect.assignee_id
-        if not defect.assignee_id or developer_id != defect.assignee_id:
+        if not actor.is_developer:
+            raise ValueError("Only Developer role can set defect to Fixed.")
+        if not defect.assignee_id or actor.actor_id != defect.assignee_id:
             raise ValueError("Only the assigned developer may mark this defect Fixed.")
         defect.fix_note = (payload.get("fix_note") or "").strip()
         defect.status = DefectStatus.FIXED
         defect.decided_at = timezone.now()
         defect.save(update_fields=["fix_note", "status", "decided_at", "updated_at"])
-        _record_status_change(defect, current, defect.status, developer_id)
+        _record_status_change(defect, current, defect.status, actor.actor_id)
         _notify_status_change(defect)
         return "Defect moved to Fixed."
 
     if action == "cannot_reproduce":
         if current != DefectStatus.ASSIGNED:
             raise ValueError("Only Assigned defects can be marked Cannot Reproduce.")
-        developer_id = (payload.get("developer_id") or "").strip() or defect.assignee_id
-        if not defect.assignee_id or developer_id != defect.assignee_id:
+        if not actor.is_developer:
+            raise ValueError("Only Developer role can mark Cannot Reproduce.")
+        if not defect.assignee_id or actor.actor_id != defect.assignee_id:
             raise ValueError("Only the assigned developer may mark this defect Cannot Reproduce.")
         defect.fix_note = (payload.get("fix_note") or "").strip()
         defect.status = DefectStatus.CANNOT_REPRODUCE
         defect.decided_at = timezone.now()
         defect.save(update_fields=["fix_note", "status", "decided_at", "updated_at"])
-        _record_status_change(defect, current, defect.status, developer_id)
+        _record_status_change(defect, current, defect.status, actor.actor_id)
         _notify_status_change(defect)
         return "Defect moved to Cannot Reproduce."
 
     if action == "set_resolved":
         if current != DefectStatus.FIXED:
             raise ValueError("Only Fixed defects can be resolved.")
-        owner_id = (payload.get("owner_id") or "").strip() or defect.product.owner_id
-        if owner_id != defect.product.owner_id:
+        if not actor.is_owner:
+            raise ValueError("Only Product Owner role can resolve this defect.")
+        if actor.actor_id != defect.product.owner_id:
             raise ValueError("Only the Product Owner can resolve this defect.")
         defect.retest_note = (payload.get("retest_note") or "").strip()
         defect.status = DefectStatus.RESOLVED
         defect.decided_at = timezone.now()
         defect.save(update_fields=["retest_note", "status", "decided_at", "updated_at"])
-        _record_status_change(defect, current, defect.status, owner_id)
+        _record_status_change(defect, current, defect.status, actor.actor_id)
         _notify_status_change(defect)
         return "Defect moved to Resolved."
 
     if action == "reopen":
         if current != DefectStatus.FIXED:
             raise ValueError("Only Fixed defects can be reopened.")
-        owner_id = (payload.get("owner_id") or "").strip() or defect.product.owner_id
-        if owner_id != defect.product.owner_id:
+        if not actor.is_owner:
+            raise ValueError("Only Product Owner role can reopen this defect.")
+        if actor.actor_id != defect.product.owner_id:
             raise ValueError("Only the Product Owner can reopen this defect.")
         defect.retest_note = (payload.get("retest_note") or "").strip()
         defect.status = DefectStatus.REOPENED
         defect.decided_at = timezone.now()
         defect.save(update_fields=["retest_note", "status", "decided_at", "updated_at"])
-        _record_status_change(defect, current, defect.status, owner_id)
+        _record_status_change(defect, current, defect.status, actor.actor_id)
         _notify_status_change(defect)
         return "Defect moved to Reopened."
 
     if action == "add_comment":
         comment = (payload.get("comment") or "").strip()
-        author = (payload.get("author") or "").strip() or "Unknown"
+        if not actor.is_owner and not actor.is_developer:
+            raise ValueError("Only Product Owner or Developer may add comments.")
         if not comment:
             raise ValueError("Comment text is required.")
-        DefectComment.objects.create(defect=defect, author_id=author, text=comment)
+        DefectComment.objects.create(defect=defect, author_id=actor.actor_id, text=comment)
         return "Comment added."
 
     raise ValueError("Unknown action.")

@@ -19,12 +19,22 @@
       <header class="topbar">
         <div>
           <div class="brand">BetaTrax Defects</div>
-          <div class="sub">Single defect page driven by lifecycle state</div>
+          <div class="sub">
+            {% if request.user.is_authenticated %}
+            Signed in as {{ request.user.username }}
+            {% else %}
+            Single defect page driven by lifecycle state
+            {% endif %}
+          </div>
         </div>
         <div class="top-links">
           {% block header_actions %}{% endblock %}
-          <a class="action-link primary" href="{% url 'frontend:create-defect' %}">New</a>
-          <a class="action-link" href="{% url 'frontend:external-auth' %}">Auth Mock</a>
+          {# External system submits New defects; internal UI does not expose create-new in Sprint 1. #}
+          {% if request.user.is_authenticated %}
+          <a class="action-link" href="{% url 'frontend:sign-out' %}">Sign Out</a>
+          {% else %}
+          <a class="action-link" href="{% url 'frontend:external-auth' %}">Sign In</a>
+          {% endif %}
         </div>
       </header>
 

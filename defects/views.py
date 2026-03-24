@@ -1,9 +1,10 @@
 from django.db import transaction
 from rest_framework import status
-from rest_framework.permissions import AllowAny
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
+from .authz import actor_from_user
 from .models import DefectReport, Product
 from .serializers import DefectActionSerializer, DefectCreateSerializer
 from .services import STATUS_BY_SLUG, apply_action, create_defect, ensure_demo_seed, serialize_defect_for_api
@@ -15,6 +16,7 @@ class DefectCreateApi(APIView):
     @transaction.atomic
     def post(self, request):
         ensure_demo_seed()
+
         serializer = DefectCreateSerializer(data=request.data)
         if not serializer.is_valid():
             details = serializer.errors
@@ -53,15 +55,21 @@ class DefectCreateApi(APIView):
 
 
 class DefectListApi(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         ensure_demo_seed()
+        actor = actor_from_user(request.user)
+        if not actor.is_owner and not actor.is_developer:
+            return Response({"error": "Only Product Owner or Developer can view defects."}, status=status.HTTP_403_FORBIDDEN)
+
         queryset = DefectReport.objects.select_related("product").order_by("-received_at")
 
         status_value = str(request.query_params.get("status", "")).strip()
         if status_value:
             desired = STATUS_BY_SLUG.get(status_value.lower().replace(" ", "-"), status_value)
+            if actor.is_developer and desired == "New":
+                return Response({"error": "Developer cannot access New defects."}, status=status.HTTP_403_FORBIDDEN)
             queryset = queryset.filter(status=desired)
 
         product_id = str(request.query_params.get("product_id", "")).strip()
@@ -70,17 +78,24 @@ class DefectListApi(APIView):
 
         owner_id = str(request.query_params.get("owner_id", "")).strip()
         if owner_id:
-            queryset = queryset.filter(product__owner_id=owner_id)
+            if not actor.is_owner or owner_id != actor.actor_id:
+                return Response({"error": "owner_id must match authenticated Product Owner."}, status=status.HTTP_403_FORBIDDEN)
 
         developer_id = str(request.query_params.get("developer_id", "")).strip()
         if developer_id:
-            queryset = queryset.filter(product__developers__developer_id=developer_id).distinct()
+            if not actor.is_developer or developer_id != actor.actor_id:
+                return Response({"error": "developer_id must match authenticated Developer."}, status=status.HTTP_403_FORBIDDEN)
+
+        if actor.is_owner:
+            queryset = queryset.filter(product__owner_id=actor.actor_id)
+        elif actor.is_developer:
+            queryset = queryset.filter(product__developers__developer_id=actor.actor_id).distinct()
 
         return Response({"items": [serialize_defect_for_api(defect) for defect in queryset]})
 
 
 class DefectActionApi(APIView):
-    permission_classes = [AllowAny]
+    permission_classes = [IsAuthenticated]
 
     @transaction.atomic
     def post(self, request, defect_id):
@@ -94,9 +109,12 @@ class DefectActionApi(APIView):
             return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
 
         payload = serializer.validated_data
+        actor = actor_from_user(request.user)
+        if not actor.actor_id:
+            return Response({"error": "Authentication required."}, status=status.HTTP_403_FORBIDDEN)
         action = str(payload.get("action", "")).strip()
         try:
-            message = apply_action(defect, action, payload)
+            message = apply_action(defect, action, payload, actor)
         except ValueError as exc:
             return Response({"error": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 

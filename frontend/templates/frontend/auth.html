@@ -1,23 +1,28 @@
 ﻿{% extends 'frontend/base.html' %}
 
-{% block title %}Auth Mock - BetaTrax{% endblock %}
+{% block title %}Sign In - BetaTrax{% endblock %}
 {% block header_actions %}
 <a class="action-link" href="{% url 'frontend:home' %}">Home</a>
 {% endblock %}
 
 {% block content %}
 <section class="card hero">
-  <h1>External Authorization Mock</h1>
-  <p>Mock identity check before protected actions.</p>
+  <h1>Sign In</h1>
+  <p>Authenticate as Product Owner or Developer to access protected defect workflows.</p>
 </section>
 
 <section class="card">
-  <div class="field"><label>User ID</label><input placeholder="owner-001 / dev-001" /></div>
-  <div class="field"><label>Password</label><input type="password" placeholder="Enter password" /></div>
-  <div class="actions">
-    <button class="primary" data-status-target="auth-status" data-message="Authentication successful.">Authenticate</button>
-    <button class="warn" data-status-target="auth-status" data-message="Authentication failed." data-tone="error">Simulate Failure</button>
+  <form method="post" class="form-grid">
+    {% csrf_token %}
+    <div class="field"><label>Username</label><input name="username" placeholder="owner-001 / dev-001" required /></div>
+    <div class="field"><label>Password</label><input type="password" name="password" placeholder="Pass1234!" required /></div>
+    <div class="actions">
+      <button class="primary" type="submit">Sign In</button>
+    </div>
+  </form>
+  <div class="status-box">
+    Demo accounts are auto-created:
+    <code>owner-001</code>, <code>dev-001</code>, <code>dev-004</code> (password: <code>Pass1234!</code>)
   </div>
-  <div id="auth-status" class="status-box">No authentication attempt yet.</div>
 </section>
 {% endblock %}

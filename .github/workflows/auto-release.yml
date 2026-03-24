@@ -1,0 +1,84 @@
+name: Auto Release
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Release version/tag (e.g. v1.2.3 or v1.2.3-alpha.1)"
+        required: false
+        type: string
+      prerelease:
+        description: "Mark as prerelease (for alpha/beta)"
+        required: false
+        default: true
+        type: boolean
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        if: ${{ github.event_name != 'workflow_run' }}
+
+      - name: Checkout workflow_run commit
+        uses: actions/checkout@v4
+        if: ${{ github.event_name == 'workflow_run' }}
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Resolve release metadata
+        id: meta
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.version }}" ]]; then
+            TAG="${{ inputs.version }}"
+          else
+            if [[ ! -f VERSION ]]; then
+              echo "VERSION file not found. Please create VERSION in repo root."
+              exit 1
+            fi
+
+            TAG="$(tr -d '[:space:]' < VERSION)"
+            if [[ -z "$TAG" ]]; then
+              echo "VERSION file is empty."
+              exit 1
+            fi
+          fi
+
+          if [[ "$TAG" != v* ]]; then
+            TAG="v$TAG"
+          fi
+
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            PRERELEASE="${{ inputs.prerelease }}"
+            COMMIT_SHA="${{ github.sha }}"
+          else
+            PRERELEASE="false"
+            COMMIT_SHA="${{ github.event.workflow_run.head_sha }}"
+          fi
+
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          echo "prerelease=$PRERELEASE" >> "$GITHUB_OUTPUT"
+          echo "commit_sha=$COMMIT_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Create or update GitHub release
+        uses: ncipollo/release-action@v1
+        with:
+          tag: ${{ steps.meta.outputs.tag }}
+          name: Release ${{ steps.meta.outputs.tag }}
+          commit: ${{ steps.meta.outputs.commit_sha }}
+          generateReleaseNotes: true
+          prerelease: ${{ steps.meta.outputs.prerelease }}
+          allowUpdates: true
+          skipIfReleaseExists: false

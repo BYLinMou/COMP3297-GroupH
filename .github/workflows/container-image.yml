@@ -1,0 +1,98 @@
+name: Container Image
+
+on:
+  workflow_run:
+    workflows: ["CI"]
+    types:
+      - completed
+    branches:
+      - main
+  workflow_dispatch:
+    inputs:
+      image_tag:
+        description: "Optional image tag (e.g. alpha, v0.1.0-alpha.1)"
+        required: false
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-and-push:
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        if: ${{ github.event_name != 'workflow_run' }}
+
+      - name: Checkout workflow_run commit
+        uses: actions/checkout@v4
+        if: ${{ github.event_name == 'workflow_run' }}
+        with:
+          ref: ${{ github.event.workflow_run.head_sha }}
+
+      - name: Validate Dockerfile exists
+        run: |
+          if [ ! -f Dockerfile ]; then
+            echo "Dockerfile not found in repository root."
+            exit 1
+          fi
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Prepare image name
+        id: prep
+        shell: bash
+        run: |
+          REPO_LC="$(echo '${{ github.event.repository.name }}' | tr '[:upper:]' '[:lower:]')"
+          OWNER_LC="$(echo '${{ github.repository_owner }}' | tr '[:upper:]' '[:lower:]')"
+          echo "image=ghcr.io/${OWNER_LC}/${REPO_LC}" >> "$GITHUB_OUTPUT"
+
+      - name: Resolve image tags
+        id: tags
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.image_tag }}" ]]; then
+            VERSION_TAG="${{ inputs.image_tag }}"
+          else
+            if [[ ! -f VERSION ]]; then
+              echo "VERSION file not found. Please create VERSION in repo root."
+              exit 1
+            fi
+            VERSION_TAG="$(tr -d '[:space:]' < VERSION)"
+            if [[ -z "$VERSION_TAG" ]]; then
+              echo "VERSION file is empty."
+              exit 1
+            fi
+          fi
+
+          SHA_TAG="sha-$(git rev-parse --short HEAD)"
+          IMAGE="${{ steps.prep.outputs.image }}"
+          TAG_LINES="${IMAGE}:${VERSION_TAG}"$'\n'"${IMAGE}:${SHA_TAG}"
+
+          if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
+            TAG_LINES="${TAG_LINES}"$'\n'"${IMAGE}:latest"
+          fi
+
+          {
+            echo "tags<<EOF"
+            echo "$TAG_LINES"
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Build and push image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          tags: ${{ steps.tags.outputs.tags }}

@@ -25,6 +25,14 @@ It can also be triggered manually with an optional `image_tag` input (for exampl
 By default, image version tag is read from the `VERSION` file.
 The published image path is `ghcr.io/<owner>/<repo>`.
 
+## Runtime Configuration
+
+BetaTrax reads environment variables from container/runtime environment and also supports a local `.env` file.
+Use `.env.example` as the template.
+
+For Docker, the common way is:
+- `docker run --env-file .env -p 8000:8000 <your-image>`
+
 ## License
 
 This project is licensed under **GNU General Public License v3.0 (GPL-3.0)**.

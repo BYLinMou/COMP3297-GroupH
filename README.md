@@ -22,7 +22,7 @@ Release version is read from the `VERSION` file by default, or overridden via ma
 3. **Container Image** (`.github/workflows/container-image.yml`)
 Builds and pushes a Docker image to GitHub Container Registry (GHCR) only after CI succeeds on `main`.
 It can also be triggered manually with an optional `image_tag` input (for example, `alpha`).
-By default, image version tag is read from the `VERSION` file.
+By default, image version tag is read from the `VERSION` file. Automatic runs also update `latest`.
 The published image path is `ghcr.io/<owner>/<repo>`.
 
 ## Runtime Configuration

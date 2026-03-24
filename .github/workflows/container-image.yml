@@ -76,9 +76,8 @@ jobs:
             fi
           fi
 
-          SHA_TAG="sha-$(git rev-parse --short HEAD)"
           IMAGE="${{ steps.prep.outputs.image }}"
-          TAG_LINES="${IMAGE}:${VERSION_TAG}"$'\n'"${IMAGE}:${SHA_TAG}"
+          TAG_LINES="${IMAGE}:${VERSION_TAG}"
 
           if [[ "${{ github.event_name }}" == "workflow_run" ]]; then
             TAG_LINES="${TAG_LINES}"$'\n'"${IMAGE}:latest"
@@ -96,3 +95,5 @@ jobs:
           context: .
           push: true
           tags: ${{ steps.tags.outputs.tags }}
+          provenance: false
+          sbom: false

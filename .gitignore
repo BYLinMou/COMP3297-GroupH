@@ -26,3 +26,5 @@ staticfiles/
 .DS_Store
 Thumbs.db
 
+# UI Storyboard ref
+storyboard_ref/

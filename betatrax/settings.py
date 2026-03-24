@@ -39,7 +39,8 @@ _load_dotenv(BASE_DIR / ".env")
 SECRET_KEY = 'django-insecure-#gy1nwck5!1e@@qcey(j36qe)s5f365s!$fn3hw##3k$5wd2lh'
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = os.getenv("DJANGO_DEBUG", "False").lower() in {"1", "true", "yes", "on"}
+# Default True for local development convenience; set DJANGO_DEBUG=False in production.
+DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() in {"1", "true", "yes", "on"}
 
 def _split_csv_env(name: str) -> list[str]:
     raw = os.getenv(name, "")
@@ -66,6 +67,9 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
+    'rest_framework',
+    'defects',
+    'frontend',
 ]
 
 MIDDLEWARE = [
@@ -133,7 +137,7 @@ AUTH_PASSWORD_VALIDATORS = [
 
 LANGUAGE_CODE = 'en-us'
 
-TIME_ZONE = 'UTC'
+TIME_ZONE = 'Asia/Hong_Kong'
 
 USE_I18N = True
 
@@ -143,9 +147,27 @@ USE_TZ = True
 # Static files (CSS, JavaScript, Images)
 # https://docs.djangoproject.com/en/5.2/howto/static-files/
 
-STATIC_URL = 'static/'
+STATIC_URL = '/static/'
 
 # Default primary key field type
 # https://docs.djangoproject.com/en/5.2/ref/settings/#default-auto-field
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+
+# Email
+EMAIL_ENABLED = os.getenv("EMAIL_ENABLED", "False").lower() in {"1", "true", "yes", "on"}
+if EMAIL_ENABLED:
+    EMAIL_BACKEND = "django.core.mail.backends.smtp.EmailBackend"
+    EMAIL_HOST = os.getenv("EMAIL_HOST", "smtp.gmail.com")
+    EMAIL_PORT = int(os.getenv("EMAIL_PORT", "587"))
+    EMAIL_USE_TLS = os.getenv("EMAIL_USE_TLS", "True").lower() in {"1", "true", "yes", "on"}
+    EMAIL_USE_SSL = os.getenv("EMAIL_USE_SSL", "False").lower() in {"1", "true", "yes", "on"}
+    EMAIL_HOST_USER = os.getenv("EMAIL_HOST_USER", "")
+    EMAIL_HOST_PASSWORD = os.getenv("EMAIL_HOST_PASSWORD", "")
+    default_sender = f"BetaTrax <{EMAIL_HOST_USER}>" if EMAIL_HOST_USER else "BetaTrax <noreply@betatrax.local>"
+    DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", default_sender)
+    SERVER_EMAIL = os.getenv("SERVER_EMAIL", DEFAULT_FROM_EMAIL)
+else:
+    # Keep email side effects disabled by default in Sprint 1.
+    EMAIL_BACKEND = "django.core.mail.backends.dummy.EmailBackend"

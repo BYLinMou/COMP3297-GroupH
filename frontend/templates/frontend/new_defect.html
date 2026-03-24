@@ -1,0 +1,27 @@
+﻿{% extends 'frontend/base.html' %}
+
+{% block title %}Create Defect - BetaTrax{% endblock %}
+{% block header_actions %}
+<a class="action-link" href="{% url 'frontend:home' %}">Home</a>
+{% endblock %}
+
+{% block content %}
+<section class="card hero">
+  <h1>Create New Defect</h1>
+  <p>Submit required fields to create a defect with initial status <strong>New</strong>.</p>
+</section>
+
+<section class="card">
+  <form method="post" action="{% url 'frontend:create-defect' %}" class="form-grid">
+    {% csrf_token %}
+    <div class="field"><label>Product ID</label><input name="product_id" placeholder="PRD-1007" required /></div>
+    <div class="field"><label>Version</label><input name="version" placeholder="v1.4.3-beta" required /></div>
+    <div class="field"><label>Title</label><input name="title" placeholder="App crashes after save" required /></div>
+    <div class="field"><label>Description</label><textarea name="description" required></textarea></div>
+    <div class="field"><label>Steps</label><textarea name="steps" required></textarea></div>
+    <div class="field"><label>Tester ID</label><input name="tester_id" placeholder="tester-008" required /></div>
+    <div class="field"><label>Email (optional)</label><input name="email" type="email" placeholder="tester@example.com" /></div>
+    <div class="actions"><button class="primary" type="submit">Submit</button></div>
+  </form>
+</section>
+{% endblock %}

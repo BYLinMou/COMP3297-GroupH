@@ -252,3 +252,109 @@ US-13	Close a Fixed defect as Resolved	As a Product Owner, I want to mark a Fixe
 US-14	Send email notification when defect is Resolved	As a Beta Tester, I want to receive an email when my defect is marked Resolved so that I know the issue has been corrected.	"• Email sent to tester address on transition to 'Resolved'.
 • No email sent if no address is stored.
 • Email content identifies the report and new status. "	Sprint 1	BT-UC6
+
+---
+
+Current course instruction:
+
+COMP3297 Software Engineering
+School of Computing and Data Science
+Department of Computer Science
+Sprint 1 Task Sheet: BetaTrax
+Sprint 1 Overview:
+Your goal in Sprint 1 is to deliver an increment of BetaTrax that provides the most valuable functionality of a
+Minimum Viable Product. This will require you to design and implement main success slices of several of your
+use cases. In Sprint 2 you will implement the remaining functionality to take you to Release 1, a Minimum
+Marketable Product.
+By delivering these first slices of end-to-end functionality you will drive down the risk associated with your lack
+of familiarity with Django and the Django Rest Framework, as well as further reducing the risk associated with
+any misunderstanding of requirements.
+You will also get a clearer idea of your development velocity and the amount of work your group can commit to
+complete within a sprint timebox.
+To better understand the needs of users, you will create throwaway UI prototypes in the form of wireframes for
+review during the Sprint.
+Tasks for Sprint 1:
+UI Prototypes
+Create UI storyboards for BetaTrax to present and discuss with your client during the sprint. You won’t
+implement these. Their purpose is to confirm your understanding of requirements and of the data that must cross
+the system boundary in API requests and responses. They should be Throwaway Prototypes showing rough UI
+layout and flow for each of the use cases you wrote in Inception. Wireframe sketches on paper are sufficient.
+You are not required to prototype the UI of products under test through which testers submit defects to
+BetaTrax.
+Create a Product Backlog
+Your backlog is an ordered list of all work known to be required for the product, with highest priority PBIs at the
+top. Create your Product Backlog as follows:
+o Split your use cases into slices.
+o For slices you will take into Sprint 1 (see below), write them as one or more
+sprintable User Stories. Include a Confirmation section for each of those Stories.
+o It’s common to use a spreadsheet-like format to record the product backlog, or to
+use a 3rd party tool designed to manage backlogs. If you use a spreadsheet format,
+your column headings at this point should be:
+ID Title Description Confirmation
+Note: the Title and the Description (“As a…I want…So that” ) together form the “Card” part of the story.Required Slices
+Functionality for each of the following will appear in one or may be divided across several of your Inception
+use cases. Actors are shown in square brackets. Take slices containing this functionality into Sprint 1:
+o [Application under test] Submit a defect report in which the tester has supplied an email address.
+o [Product Owner] View, evaluate and accept the defect, recording Severity and Priority.
+o [Developer] View and take responsibility for a defect and fix it.
+o [Product Owner] Close the defect as Resolved.
+This represents a simple traversal of the defect lifecycle in which the defect status passes through the
+following sequence, with email notifications sent accordingly:
+New -> Open -> Assigned -> Fixed -> Resolved.
+If you are confident in your team’s ability to deliver the listed functionality within the sprint, you may break
+additional slices into stories, add them to the backlog and implement them in Sprint 1.
+Remaining functionality
+Place all remaining slices directly into the backlog as PBIs. You will break them into user stories ahead of
+future sprints.
+Analysis: Domain Model
+Work from your User Stories for Sprint 1 to identify a set of conceptual classes and construct a partial Domain
+Model in the form of a single class diagram for those stories. This will provide a basis for identifying resources
+and for the design of your Django model classes.
+Implementation
+For the PBIs you are taking into Sprint 1, design your API, implement it on Django using the Django Rest
+Framework and test the resulting increment. Your executable need only support a single registered product in
+Sprint 1. In general, the actions crossing the system boundary from actor to BetaTrax recorded as steps in your
+use case slices will indicate operations needed in your API.
+Note: During Reading Week we will post an introduction to the Django Rest Framework.
+Technical notes:
+o User registration is not required in early MVP and MMP releases. You will register users through the
+Django Admin Interface
+o Similarly, product registration is not part of Sprint 1. You will perform product registration through
+Django Admin.
+o For convenience of testing and demos, it will be sufficient to configure Django to write all emails to the
+console or to a file. Django provides backends for both. This is not a constraint, however, and you are
+free to configure to use an actual mail server if you wish.
+o Roughly track how long it takes to deliver each user story. This will be useful for planning future sprints.Tools: Git and GitHub
+To support collaboration, you are required to use a version-control system (VCS) with remote repository or
+repositories to coordinate your implementation work. You know Git from our prerequisite courses and will use
+it for this project.
+GitHub offers free public/private repositories with unlimited collaborators and all core features. That would be
+a good choice as a hosting service. Choose the free plan here:
+https://github.com/pricing
+Delivering Source Code:
+Deliver your source code by zipping the root directory of your Django project. Do not include a .git directory
+or similar. Include a Readme file outlining any limitations of your Sprint 1 executable with respect to the
+requirements – for example, list any planned functionality that is missing or not working correctly.
+Demo and Review
+Our first review session will take place during the week of March 30. It will also serve as an additional
+checkpoint to ensure your team is not headed in the wrong direction. You will have the opportunity to select
+your preferred timeslot when the date is announced. We don’t require every team member to be present. In the
+session you will discuss and demonstrate your progress. You are not required to give a presentation.
+SUMMARY OF SPRINT 1 DELIVERABLES
+Note: there are separate deadlines
+ Throwaway UI Storyboards for BetaTrax
+ Product Backlog before taking PBIs into the Sprint. Indicate which PBIs you will take into Sprint 1
+ Partial Domain Model
+ Source code and Readme file
+ List of team members’ contributions
+Handin Method: Via Moodle, only one submission per team.
+Deadlines: Storyboards: to be available by the end of March 19 ready for review with a
+representative of your client on March 20.
+Revised Storyboards, Product Backlog, Partial Domain Model: March 26. 23:59
+Source Code, Readme file and List of members contributions: March 29, 23:59.
+(At the original deadline, March 26, we will release instructions for populating your
+application in preparation for the demo. We will give you a few days to ensure you can
+do this successfully. Also, since there is a quiz during the sprint, we understand you
+may need a little more time to work on the implementation. However, Sprint 2 will still
+begin on March 26 to enable some team members to begin working on it while others
+refine the Sprint 1 code.)

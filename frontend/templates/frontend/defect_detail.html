@@ -1,0 +1,104 @@
+﻿{% extends 'frontend/base.html' %}
+
+{% block title %}{{ defect.id }} - BetaTrax{% endblock %}
+{% block header_actions %}
+<a class="action-link" href="{% url 'frontend:home' %}">Home</a>
+{% endblock %}
+
+{% block content %}
+<section class="card hero">
+  <h1>{{ defect.id }} {{ defect.title }}</h1>
+  <p>
+    Current status:
+    <span class="status-badge {{ defect.badge_class }}">{{ defect.status }}</span>
+  </p>
+  <p class="sub">Product {{ defect.product_id }} | Version {{ defect.version }} | Tester {{ defect.tester_id }}</p>
+</section>
+
+<section class="grid two-col">
+  <article class="card">
+    <h2>Description</h2>
+    <p>{{ defect.description }}</p>
+    <h3>Steps</h3>
+    <pre class="mono">{{ defect.steps }}</pre>
+    {% if defect.severity or defect.priority %}
+    <p><strong>Severity/Priority:</strong> {{ defect.severity }} / {{ defect.priority }}</p>
+    {% endif %}
+    {% if defect.backlog_ref %}
+    <p><strong>Backlog:</strong> {{ defect.backlog_ref }}</p>
+    {% endif %}
+    {% if defect.assignee %}
+    <p><strong>Assignee:</strong> {{ defect.assignee }}</p>
+    {% endif %}
+  </article>
+
+  <article class="card">
+    <h2>Available Action</h2>
+
+    {% if defect.status == 'New' %}
+    <form method="post" class="form-grid">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="accept_open" />
+      <div class="field"><label>Severity</label><select name="severity"><option>High</option><option>Medium</option><option>Low</option></select></div>
+      <div class="field"><label>Priority</label><select name="priority"><option>P1</option><option>P2</option><option>P3</option></select></div>
+      <div class="field"><label>Backlog Reference</label><input name="backlog_ref" placeholder="BETA-249" /></div>
+      <div class="actions"><button class="primary" type="submit">Accept -> Open</button></div>
+    </form>
+    <form method="post" class="actions inline-form">{% csrf_token %}<input type="hidden" name="action" value="reject" /><button class="warn" type="submit">Reject</button></form>
+    <form method="post" class="actions inline-form">{% csrf_token %}<input type="hidden" name="action" value="duplicate" /><button class="warn" type="submit">Duplicate</button></form>
+    {% elif defect.status == 'Open' or defect.status == 'Reopened' %}
+    <form method="post" class="form-grid">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="take_ownership" />
+      <div class="field"><label>Developer ID</label><input name="developer_id" placeholder="dev-001" required /></div>
+      <div class="actions"><button class="primary" type="submit">Take Ownership -> Assigned</button></div>
+    </form>
+    {% elif defect.status == 'Assigned' %}
+    <form method="post" class="form-grid">
+      {% csrf_token %}
+      <div class="field"><label>Fix Note</label><textarea name="fix_note"></textarea></div>
+      <div class="actions">
+        <button class="primary" type="submit" name="action" value="set_fixed">Set Fixed</button>
+        <button class="warn" type="submit" name="action" value="cannot_reproduce">Cannot Reproduce</button>
+      </div>
+    </form>
+    {% elif defect.status == 'Fixed' %}
+    <form method="post" class="form-grid">
+      {% csrf_token %}
+      <div class="field"><label>Retest Note</label><textarea name="retest_note"></textarea></div>
+      <div class="actions">
+        <button class="primary" type="submit" name="action" value="set_resolved">Set Resolved</button>
+        <button class="warn" type="submit" name="action" value="reopen">Reopen</button>
+      </div>
+    </form>
+    {% else %}
+    <p class="sub">This status has no Sprint 1 transition action.</p>
+    {% endif %}
+  </article>
+</section>
+
+<section class="grid two-col">
+  <article class="card">
+    <h2>Add Comment</h2>
+    <form method="post" class="form-grid">
+      {% csrf_token %}
+      <input type="hidden" name="action" value="add_comment" />
+      <div class="field"><label>Author</label><input name="author" placeholder="Developer / Product Owner" required /></div>
+      <div class="field"><label>Comment</label><textarea name="comment" required></textarea></div>
+      <div class="actions"><button class="primary" type="submit">Save Comment</button></div>
+    </form>
+  </article>
+
+  <article class="card">
+    <h2>Comment History</h2>
+    {% for comment in defect.comments %}
+    <div class="comment-item">
+      <strong>{{ comment.author }}</strong>
+      <p>{{ comment.text }}</p>
+    </div>
+    {% empty %}
+    <p class="sub">No comments yet.</p>
+    {% endfor %}
+  </article>
+</section>
+{% endblock %}

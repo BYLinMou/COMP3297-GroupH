@@ -4,6 +4,13 @@ BetaTrax is a lightweight defect tracking system built for the COMP3297 software
 It supports the core bug lifecycle from **New -> Open -> Assigned -> Fixed -> Resolved**.
 The current implementation is built on a Django-based architecture (see the `betatrax/` project module).
 
+## Demo Website
+
+- Demo website: [betatrax.zeabur.app](https://betatrax.zeabur.app)
+- Admin account: `user`
+- Admin password: `testtest`
+- We recommend using the demo website first because SMTP is already configured there and it is easier to use for evaluation.
+
 ## Workflows
 
 This repository currently uses three GitHub Actions workflows:
@@ -46,6 +53,43 @@ python manage.py runserver
 ```
 
 The app will be available at `http://127.0.0.1:8000/`.
+
+## Docker Deployment
+
+Use the published image:
+
+```bash
+docker pull ghcr.io/bylinmou/comp3297-group10:latest
+```
+
+Recommended host layout (keep SQLite DB out of repo root):
+
+```bash
+mkdir -p data
+cp .env.example .env
+```
+
+Run container with DB file mount:
+
+```bash
+docker run --name betatrax \
+  -p 8000:8000 \
+  --env-file .env \
+  -v "$(pwd)/data:/data" \
+  ghcr.io/bylinmou/comp3297-group10:latest
+```
+
+PowerShell equivalent:
+
+```powershell
+docker run --name betatrax `
+  -p 8000:8000 `
+  --env-file .env `
+  -v "${PWD}\\data:/data" `
+  ghcr.io/bylinmou/comp3297-group10:latest
+```
+
+Then open `http://127.0.0.1:8000/`.
 
 ## API (Sprint 1)
 

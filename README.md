@@ -7,6 +7,7 @@ The current implementation is built on a Django-based architecture (see the `bet
 ## Demo Website
 
 - Demo website: [betatrax.zeabur.app](https://betatrax.zeabur.app)
+- Demo website 2 (backup): [betatrax.yeelam.site](https://betatrax.yeelam.site)
 - Admin account: `user`
 - Admin password: `testtest`
 - We recommend using the demo website first because SMTP is already configured there and it is easier to use for evaluation.
@@ -32,29 +33,8 @@ It can also be triggered manually with an optional `image_tag` input (for exampl
 By default, image version tag is read from the `VERSION` file. Automatic runs also update `latest`.
 The published image path is `ghcr.io/<owner>/<repo>`.
 
-## Local Development
-
-```bash
-# Create and activate conda environment
-conda create -n betatrax python=3.12
-conda activate betatrax
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Copy environment config (edit as needed)
-cp .env.example .env
-
-# Apply database migrations
-python manage.py migrate
-
-# Start the development server
-python manage.py runserver
-```
-
-The app will be available at `http://127.0.0.1:8000/`.
-
 ## Docker Deployment
+We recommend using Docker container setup for an isolated and consistent environment.
 
 Use the published image:
 
@@ -91,11 +71,65 @@ docker run --name betatrax `
 
 Then open `http://127.0.0.1:8000/`.
 
+## Local Development
+
+```bash
+# Create and activate conda environment
+conda create -n betatrax python=3.12
+conda activate betatrax
+
+# Install dependencies
+pip install -r requirements.txt
+
+# Copy environment config (edit as needed)
+cp .env.example .env
+
+# Apply database migrations
+python manage.py migrate
+
+# Start the development server
+python manage.py runserver
+```
+
+The app will be available at `http://127.0.0.1:8000/`.
+
 ## API (Sprint 1)
 
 Base path: `/api/defects/`
 
-### 1) List defects
+Testing commands for Sprint 1 acceptance criteria are provided in [testcasecommand.txt](testcasecommand.txt) (using demo website 2).
+
+### 1) Create defect report
+
+- Method: `POST`
+- Path: `/api/defects/new/`
+- Content-Type: `application/json`
+- Auth: not required (external system endpoint)
+- Required fields:
+  - `product_id`, `version`, `title`, `description`, `steps`, `tester_id`
+- Optional fields:
+  - `email`
+
+Request example:
+
+```json
+{
+  "product_id": "PRD-1007",
+  "version": "v1.5.0-beta",
+  "title": "App crash when saving profile",
+  "description": "App exits after pressing Save.",
+  "steps": "1) Open profile 2) Edit name 3) Save",
+  "tester_id": "tester-009",
+  "email": "tester@example.com"
+}
+```
+
+Responses:
+- `201` created (returns `report_id`, `status`)
+- `400` missing/invalid fields
+- `404` unknown `product_id`
+
+### 2) List defects
 
 - Method: `GET`
 - Path: `/api/defects/`
@@ -126,36 +160,6 @@ Response `200`:
   ]
 }
 ```
-
-### 2) Create defect report
-
-- Method: `POST`
-- Path: `/api/defects/new/`
-- Content-Type: `application/json`
-- Auth: not required (external system endpoint)
-- Required fields:
-  - `product_id`, `version`, `title`, `description`, `steps`, `tester_id`
-- Optional fields:
-  - `email`
-
-Request example:
-
-```json
-{
-  "product_id": "PRD-1007",
-  "version": "v1.5.0-beta",
-  "title": "App crash when saving profile",
-  "description": "App exits after pressing Save.",
-  "steps": "1) Open profile 2) Edit name 3) Save",
-  "tester_id": "tester-009",
-  "email": "tester@example.com"
-}
-```
-
-Responses:
-- `201` created (returns `report_id`, `status`)
-- `400` missing/invalid fields
-- `404` unknown `product_id`
 
 ### 3) Defect actions (status transitions / comment)
 
@@ -239,7 +243,7 @@ Notes:
 - If there is already at least one defect report, seeded defect reports are not added again.
 - The seed helper is idempotent for roles, users, product, and team membership.
 
-### Optional Email (Google SMTP) （Implementing）
+### SMTP setup (Google)
 
 Email is disabled by default (`EMAIL_ENABLED=False`) to keep Sprint 1 flow simple.
 If you want to enable notification emails, configure these in `.env`:
@@ -253,6 +257,26 @@ If you want to enable notification emails, configure these in `.env`:
 - `DEFAULT_FROM_EMAIL=BetaTrax <your-gmail-address>`
 
 For Google accounts, use a Google App Password (16 characters) instead of your login password.
+
+## Sprint 1 Limitations
+
+The following limitations are present in this Sprint 1 executable:
+
+1. Product registration and user registration are not implemented in API/UI.
+    Products and users are created through Django Admin as per course instruction.
+
+2. The executable is prepared for Sprint 1 with a single demo product (`PRD-1007`).
+    Multi-product support exists in data model, but full multi-product admin workflows are not part of Sprint 1 scope.
+
+3. Email notifications:
+    - When `EMAIL_ENABLED=True`, notifications are sent via SMTP.
+    - When `EMAIL_ENABLED=False`, emails are printed to console for demo/testing.
+    - Real mailbox delivery depends on external SMTP configuration.
+
+4. Authentication/authorization is role-based using pre-created demo accounts.
+    No self-service signup/password reset is provided (Only available through admin console).
+
+5. UI is a Sprint 1 MVP and does not cover all future lifecycle paths from full use-case set.
 
 ## License
 

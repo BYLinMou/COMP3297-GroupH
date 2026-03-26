@@ -176,5 +176,5 @@ if EMAIL_ENABLED:
     DEFAULT_FROM_EMAIL = os.getenv("DEFAULT_FROM_EMAIL", default_sender)
     SERVER_EMAIL = os.getenv("SERVER_EMAIL", DEFAULT_FROM_EMAIL)
 else:
-    # Keep email side effects disabled by default in Sprint 1.
-    EMAIL_BACKEND = "django.core.mail.backends.dummy.EmailBackend"
+    # For Sprint 1 demos/testing, print outgoing emails to server console.
+    EMAIL_BACKEND = "django.core.mail.backends.console.EmailBackend"

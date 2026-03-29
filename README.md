@@ -84,6 +84,10 @@ pip install -r requirements.txt
 # Copy environment config (edit as needed)
 cp .env.example .env
 
+# Set SQLITE_PATH=./data/db.sqlite3 in .env
+(Get-Content .env) -replace '^SQLITE_PATH=.*$', 'SQLITE_PATH=./data/db.sqlite3' | Set-Content .env
+mkdir data
+
 # Apply database migrations
 python manage.py migrate
 

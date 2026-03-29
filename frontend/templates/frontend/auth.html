@@ -1,0 +1,28 @@
+﻿{% extends 'frontend/base.html' %}
+
+{% block title %}Sign In - BetaTrax{% endblock %}
+{% block header_actions %}
+<a class="action-link" href="{% url 'frontend:home' %}">Home</a>
+{% endblock %}
+
+{% block content %}
+<section class="card hero">
+  <h1>Sign In</h1>
+  <p>Authenticate as Product Owner or Developer to access protected defect workflows.</p>
+</section>
+
+<section class="card">
+  <form method="post" class="form-grid">
+    {% csrf_token %}
+    <div class="field"><label>Username</label><input name="username" placeholder="owner-001 / dev-001" required /></div>
+    <div class="field"><label>Password</label><input type="password" name="password" placeholder="Pass1234!" required /></div>
+    <div class="actions">
+      <button class="primary" type="submit">Sign In</button>
+    </div>
+  </form>
+  <div class="status-box">
+    Demo accounts are auto-created:
+    <code>owner-001</code>, <code>dev-001</code>, <code>dev-004</code> (password: <code>Pass1234!</code>)
+  </div>
+</section>
+{% endblock %}

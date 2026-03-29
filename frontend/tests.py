@@ -1,0 +1,1 @@
+# Frontend app test placeholder.

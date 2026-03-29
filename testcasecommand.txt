@@ -1,0 +1,151 @@
+# BetaTrax Sprint 1 - Test Case Commands (curl)
+# Base URL is set to deployed site. Change if needed.
+# IMPORTANT:
+# 1) Always keep trailing slash for /api/defects/
+# 2) For EMAIL tests, check server console output when EMAIL_ENABLED=False (console backend),
+#    or check inbox when EMAIL_ENABLED=True (SMTP backend).
+
+# =========================
+# 0) Base + Accounts
+# =========================
+# Product Owner: owner-001 / Pass1234!
+# Developer:     dev-001   / Pass1234!
+# Team dev:      dev-004   / Pass1234!
+# Non-team/role checks depend on your deployed data; if unavailable, skip negative role test.
+
+
+# =========================
+# 1) POST /api/defects/new/ (Create defect)
+# =========================
+# 1.1 Success (with email)
+curl -i -X POST "https://betatrax.yeelam.site/api/defects/new/" -H "Content-Type: application/json" -d "{\"product_id\":\"PRD-1007\",\"version\":\"v1.0\",\"title\":\"S1-create-with-email\",\"description\":\"desc\",\"steps\":\"1) step\",\"tester_id\":\"tester-a\",\"email\":\"tester.a@example.com\"}"
+
+# 1.2 Success (without email)
+curl -i -X POST "https://betatrax.yeelam.site/api/defects/new/" -H "Content-Type: application/json" -d "{\"product_id\":\"PRD-1007\",\"version\":\"v1.0\",\"title\":\"S1-create-no-email\",\"description\":\"desc\",\"steps\":\"1) step\",\"tester_id\":\"tester-b\"}"
+
+# 1.3 Missing required field -> 400
+curl -i -X POST "https://betatrax.yeelam.site/api/defects/new/" -H "Content-Type: application/json" -d "{\"product_id\":\"PRD-1007\",\"version\":\"v1.0\",\"title\":\"missing fields\"}"
+
+# 1.4 Unknown product -> 404
+curl -i -X POST "https://betatrax.yeelam.site/api/defects/new/" -H "Content-Type: application/json" -d "{\"product_id\":\"PRD-9999\",\"version\":\"v1.0\",\"title\":\"unknown product\",\"description\":\"desc\",\"steps\":\"1) step\",\"tester_id\":\"tester-z\"}"
+
+
+# =========================
+# 2) GET /api/defects/?status=New (US-04)
+# =========================
+# 2.1 List New defects as Product Owner
+curl -i -u owner-001:Pass1234! "https://betatrax.yeelam.site/api/defects/?status=New"
+
+# 2.2 Empty list (not error) example by impossible product filter
+curl -i -u owner-001:Pass1234! "https://betatrax.yeelam.site/api/defects/?status=New&product_id=PRD-NOT-EXIST"
+
+# 2.3 Check response fields include report_id, title, product_id, tester_id
+curl -s -u owner-001:Pass1234! "https://betatrax.yeelam.site/api/defects/?status=New"
+
+# 2.4 Developer cannot access New -> 403
+curl -i -u dev-001:Pass1234! "https://betatrax.yeelam.site/api/defects/?status=New"
+
+
+# =========================
+# 3) Accept(New->Open) /api/defects/<report_id>/actions/ (US-05 + US-06)
+# =========================
+# Replace BT-RP-XXXX with a real New report_id from step 1 or step 2.
+
+# 3.1 Success: accept_open with valid severity/priority
+curl -i -u owner-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/defects/BT-RP-XXXX/actions/" -H "Content-Type: application/json" -d "{\"action\":\"accept_open\",\"severity\":\"High\",\"priority\":\"P1\"}"
+
+# 3.2 Invalid severity -> 400
+curl -i -u owner-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/defects/BT-RP-XXXX/actions/" -H "Content-Type: application/json" -d "{\"action\":\"accept_open\",\"severity\":\"Critical\",\"priority\":\"P1\"}"
+
+# 3.3 Invalid priority -> 400
+curl -i -u owner-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/defects/BT-RP-XXXX/actions/" -H "Content-Type: application/json" -d "{\"action\":\"accept_open\",\"severity\":\"High\",\"priority\":\"P0\"}"
+
+# 3.4 Only New can be accepted (run 3.1 first then run again) -> 400
+curl -i -u owner-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/defects/BT-RP-XXXX/actions/" -H "Content-Type: application/json" -d "{\"action\":\"accept_open\",\"severity\":\"High\",\"priority\":\"P1\"}"
+
+# 3.5 Only Product Owner may accept -> 400 (developer tries)
+curl -i -u dev-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/defects/BT-RP-XXXX/actions/" -H "Content-Type: application/json" -d "{\"action\":\"accept_open\",\"severity\":\"High\",\"priority\":\"P1\"}"
+
+# 3.6 Email checks for transition to Open
+# - If defect has tester email: expect email output (console/inbox) containing report_id and status Open.
+# - If defect has no tester email: expect no email output.
+
+
+# =========================
+# 4) GET /api/defects/?status=Open (US-07)
+# =========================
+# 4.1 List Open defects as Developer
+curl -i -u dev-001:Pass1234! "https://betatrax.yeelam.site/api/defects/?status=Open"
+
+# 4.2 Empty list example
+curl -i -u dev-001:Pass1234! "https://betatrax.yeelam.site/api/defects/?status=Open&product_id=PRD-NOT-EXIST"
+
+# 4.3 Check response includes report_id/title/product_id/severity/priority
+curl -s -u dev-001:Pass1234! "https://betatrax.yeelam.site/api/defects/?status=Open"
+
+
+# =========================
+# 5) Take Ownership(Open->Assigned) (US-08 + US-09)
+# =========================
+# Replace BT-RP-OPEN with an Open defect id.
+
+# 5.1 Success: team developer takes ownership
+curl -i -u dev-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/defects/BT-RP-OPEN/actions/" -H "Content-Type: application/json" -d "{\"action\":\"take_ownership\"}"
+
+# 5.2 Only Open/Reopened can be assigned (try on New or Fixed) -> 400
+curl -i -u dev-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/defects/BT-RP-XXXX/actions/" -H "Content-Type: application/json" -d "{\"action\":\"take_ownership\"}"
+
+# 5.3 Email checks for transition to Assigned
+# - With tester email: expect email output containing report_id and status Assigned.
+# - Without tester email: expect no email output.
+
+
+# =========================
+# 6) Set Fixed(Assigned->Fixed) (US-10 + US-11)
+# =========================
+# Replace BT-RP-ASSIGNED with an Assigned defect id assigned to dev-001.
+
+# 6.1 Success: assigned developer marks fixed
+curl -i -u dev-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/defects/BT-RP-ASSIGNED/actions/" -H "Content-Type: application/json" -d "{\"action\":\"set_fixed\",\"fix_note\":\"patched\"}"
+
+# 6.2 Only assigned developer can set fixed -> 400
+curl -i -u dev-004:Pass1234! -X POST "https://betatrax.yeelam.site/api/defects/BT-RP-ASSIGNED/actions/" -H "Content-Type: application/json" -d "{\"action\":\"set_fixed\"}"
+
+# 6.3 Only Assigned can be set Fixed -> 400
+curl -i -u dev-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/defects/BT-RP-XXXX/actions/" -H "Content-Type: application/json" -d "{\"action\":\"set_fixed\"}"
+
+# 6.4 Email checks for transition to Fixed
+# - With tester email: expect email output containing report_id and status Fixed.
+# - Without tester email: expect no email output.
+
+
+# =========================
+# 7) GET /api/defects/?status=Fixed (US-12)
+# =========================
+# 7.1 List Fixed defects as Product Owner
+curl -i -u owner-001:Pass1234! "https://betatrax.yeelam.site/api/defects/?status=Fixed"
+
+# 7.2 Empty list example
+curl -i -u owner-001:Pass1234! "https://betatrax.yeelam.site/api/defects/?status=Fixed&product_id=PRD-NOT-EXIST"
+
+# 7.3 Check response includes report_id/title/assignee_id
+curl -s -u owner-001:Pass1234! "https://betatrax.yeelam.site/api/defects/?status=Fixed"
+
+
+# =========================
+# 8) Set Resolved(Fixed->Resolved) (US-13 + US-14)
+# =========================
+# Replace BT-RP-FIXED with a Fixed defect id.
+
+# 8.1 Success: owner resolves fixed defect (optional retest_note)
+curl -i -u owner-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/defects/BT-RP-FIXED/actions/" -H "Content-Type: application/json" -d "{\"action\":\"set_resolved\",\"retest_note\":\"verified\"}"
+
+# 8.2 Only Product Owner can resolve -> 400
+curl -i -u dev-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/defects/BT-RP-FIXED/actions/" -H "Content-Type: application/json" -d "{\"action\":\"set_resolved\"}"
+
+# 8.3 Only Fixed can be resolved -> 400
+curl -i -u owner-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/defects/BT-RP-XXXX/actions/" -H "Content-Type: application/json" -d "{\"action\":\"set_resolved\"}"
+
+# 8.4 Email checks for transition to Resolved
+# - With tester email: expect email output containing report_id and status Resolved.
+# - Without tester email: expect no email output.

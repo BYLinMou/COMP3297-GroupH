@@ -1,0 +1,40 @@
+﻿{% extends 'frontend/base.html' %}
+
+{% block title %}BetaTrax - Defect Board{% endblock %}
+
+{% block content %}
+<section class="card hero">
+  <h1>Defect Board</h1>
+  <p>Single URI mode: each defect uses <code>/&lt;defect_id&gt;/</code> and shows actions based on current state.</p>
+</section>
+
+<section class="card">
+  <form id="status-filter-form" method="get" class="filter-inline">
+    <label for="status-filter-select"><strong>Status Filter:</strong></label>
+    <select id="status-filter-select" name="status">
+      <option value="all" {% if selected_status == 'all' %}selected{% endif %}>All</option>
+      <option value="new" {% if selected_status == 'new' %}selected{% endif %}>New</option>
+      <option value="open" {% if selected_status == 'open' %}selected{% endif %}>Open</option>
+      <option value="assigned" {% if selected_status == 'assigned' %}selected{% endif %}>Assigned</option>
+      <option value="fixed" {% if selected_status == 'fixed' %}selected{% endif %}>Fixed</option>
+      <option value="resolved" {% if selected_status == 'resolved' %}selected{% endif %}>Resolved</option>
+      <option value="reopened" {% if selected_status == 'reopened' %}selected{% endif %}>Reopened</option>
+    </select>
+  </form>
+  <p class="sub">Sample defects are preloaded so you can test transitions immediately.</p>
+</section>
+
+<section class="defect-list">
+  {% for defect in defects %}
+  <article class="defect-item" data-href="{% url 'frontend:defect-detail' defect_id=defect.id %}" tabindex="0" role="link">
+    <div class="defect-head">
+      <span class="status-badge {{ defect.badge_class }}">{{ defect.status }}</span>
+      <a class="defect-title" href="{% url 'frontend:defect-detail' defect_id=defect.id %}">{{ defect.id }} {{ defect.title }}</a>
+    </div>
+    <div class="defect-meta">{{ defect.product_id }} | {{ defect.version }} | tester {{ defect.tester_id }}{% if defect.assignee %} | assignee {{ defect.assignee }}{% endif %}</div>
+  </article>
+  {% empty %}
+  <article class="defect-item"><div class="defect-meta">No defects under current filter.</div></article>
+  {% endfor %}
+</section>
+{% endblock %}

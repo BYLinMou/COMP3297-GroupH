@@ -5,8 +5,8 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# Project currently has no requirements.txt; install Django directly.
-RUN pip install --no-cache-dir "Django==5.2.12"
+COPY requirements.txt /app/requirements.txt
+RUN pip install --no-cache-dir -r requirements.txt
 
 COPY . /app
 

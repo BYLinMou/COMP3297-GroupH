@@ -14,9 +14,24 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
+from pathlib import Path
+
+from django.conf import settings
 from django.contrib import admin
-from django.urls import path
+from django.urls import include, path
+from django.views.static import serve
 
 urlpatterns = [
     path('admin/', admin.site.urls),
+    path('api/defects/', include('defects.urls')),
+    path('', include('frontend.urls')),
 ]
+
+if not settings.DEBUG:
+    urlpatterns += [
+        path(
+            "static/<path:path>",
+            serve,
+            {"document_root": Path(settings.BASE_DIR) / "frontend" / "static"},
+        )
+    ]

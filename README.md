@@ -39,7 +39,7 @@ We recommend using Docker container setup for an isolated and consistent environ
 Use the published image:
 
 ```bash
-docker pull ghcr.io/bylinmou/comp3297-groupH:latest
+docker pull ghcr.io/bylinmou/comp3297-grouph:latest
 ```
 
 Recommended host layout (keep SQLite DB out of repo root):
@@ -56,7 +56,7 @@ docker run --name betatrax \
   -p 8000:8000 \
   --env-file .env \
   -v "$(pwd)/data:/data" \
-  ghcr.io/bylinmou/comp3297-groupH:latest
+  ghcr.io/bylinmou/comp3297-grouph:latest
 ```
 
 PowerShell equivalent:
@@ -66,7 +66,7 @@ docker run --name betatrax `
   -p 8000:8000 `
   --env-file .env `
   -v "${PWD}\\data:/data" `
-  ghcr.io/bylinmou/comp3297-groupH:latest
+  ghcr.io/bylinmou/comp3297-grouph:latest
 ```
 
 Then open `http://127.0.0.1:8000/`.

@@ -36,9 +36,42 @@ jobs:
         if: ${{ github.event_name == 'workflow_run' }}
         with:
           ref: ${{ github.event.workflow_run.head_sha }}
+          fetch-depth: 2
+
+      - name: Check whether release should run
+        id: scope
+        shell: bash
+        run: |
+          if [[ "${{ github.event_name }}" == "workflow_dispatch" ]]; then
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          if ! git rev-parse HEAD^ >/dev/null 2>&1; then
+            echo "No parent commit detected. Keep release enabled."
+            echo "should_run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          CHANGED_FILES="$(git diff --name-only HEAD^ HEAD)"
+          echo "Changed files:"
+          echo "$CHANGED_FILES"
+
+          SHOULD_RUN="false"
+          while IFS= read -r file; do
+            [[ -z "$file" ]] && continue
+            if [[ "$file" == "README.md" || "$file" == "AGENTS.md" || "$file" == .github/workflows/* ]]; then
+              continue
+            fi
+            SHOULD_RUN="true"
+            break
+          done <<< "$CHANGED_FILES"
+
+          echo "should_run=$SHOULD_RUN" >> "$GITHUB_OUTPUT"
 
       - name: Resolve release metadata
         id: meta
+        if: ${{ steps.scope.outputs.should_run == 'true' }}
         shell: bash
         run: |
           if [[ "${{ github.event_name }}" == "workflow_dispatch" && -n "${{ inputs.version }}" ]]; then
@@ -73,6 +106,7 @@ jobs:
           echo "commit_sha=$COMMIT_SHA" >> "$GITHUB_OUTPUT"
 
       - name: Create or update GitHub release
+        if: ${{ steps.scope.outputs.should_run == 'true' }}
         uses: ncipollo/release-action@v1
         with:
           tag: ${{ steps.meta.outputs.tag }}
@@ -82,3 +116,7 @@ jobs:
           prerelease: ${{ steps.meta.outputs.prerelease }}
           allowUpdates: true
           skipIfReleaseExists: false
+
+      - name: Skip release for docs/workflow-only changes
+        if: ${{ steps.scope.outputs.should_run != 'true' }}
+        run: echo "Skipping release because only README.md, AGENTS.md, or .github/workflows/** changed."

@@ -1,9 +1,11 @@
+from datetime import datetime
 from typing import Any
 
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core.mail import send_mail
+from django.utils.dateparse import parse_datetime
 from django.utils import timezone
 
 from .authz import ActorContext, ROLE_DEVELOPER, ROLE_OWNER
@@ -33,102 +35,68 @@ STATUS_STYLE = {
 STATUS_BY_SLUG = {choice[0].lower().replace(" ", "-"): choice[0] for choice in DefectStatus.choices}
 REQUIRED_CREATE_FIELDS = ("product_id", "version", "title", "description", "steps", "tester_id")
 
+DEMO_PRODUCT_ID = "Prod_1"
+DEMO_OWNER_ID = "owner-001"
+DEMO_PRIMARY_DEVELOPER_ID = "dev-001"
+LEGACY_DEMO_PRODUCT_ID = "PRD-1007"
+LEGACY_DEMO_REPORT_IDS = {
+    "BT-RP-2471",
+    "BT-RP-2462",
+    "BT-RP-2440",
+    "BT-RP-2421",
+    "BT-RP-2475",
+    "BT-RP-2476",
+}
+
 
 def ensure_demo_seed() -> None:
     _ensure_demo_users()
+    _remove_legacy_demo_seed()
     product, _ = Product.objects.get_or_create(
-        product_id="PRD-1007",
-        defaults={"name": "BetaTrax Demo Product", "owner_id": "owner-001"},
+        product_id=DEMO_PRODUCT_ID,
+        defaults={"name": "BetaTrax Demo Product", "owner_id": DEMO_OWNER_ID},
     )
-    if product.owner_id != "owner-001":
-        product.owner_id = "owner-001"
-        product.save(update_fields=["owner_id"])
+    fields_to_update = []
+    if product.owner_id != DEMO_OWNER_ID:
+        product.owner_id = DEMO_OWNER_ID
+        fields_to_update.append("owner_id")
+    if product.name != "BetaTrax Demo Product":
+        product.name = "BetaTrax Demo Product"
+        fields_to_update.append("name")
+    if fields_to_update:
+        product.save(update_fields=fields_to_update)
 
-    ProductDeveloper.objects.get_or_create(product=product, developer_id="dev-001")
-    ProductDeveloper.objects.get_or_create(product=product, developer_id="dev-004")
+    ProductDeveloper.objects.get_or_create(product=product, developer_id=DEMO_PRIMARY_DEVELOPER_ID)
+    ProductDeveloper.objects.filter(product=product).exclude(developer_id=DEMO_PRIMARY_DEVELOPER_ID).delete()
 
-    if DefectReport.objects.exists():
+    if DefectReport.objects.filter(product=product).exists():
         return
 
     seed_defects = [
         {
-            "report_id": "BT-RP-2471",
-            "title": "App crashes after Save",
-            "version": "v1.4.3-beta",
-            "tester_id": "tester-008",
-            "tester_email": "tester@example.com",
-            "status": DefectStatus.NEW,
-            "description": "When user clicks Save on dashboard settings, app crashes and returns to login.",
-            "steps": "1) Open settings\n2) Change a value\n3) Click Save",
-        },
-        {
-            "report_id": "BT-RP-2462",
-            "title": "Login timeout in beta region",
-            "version": "v1.4.2-beta",
-            "tester_id": "tester-014",
-            "status": DefectStatus.OPEN,
-            "severity": Severity.HIGH,
-            "priority": Priority.P1,
-            "backlog_ref": "BETA-249",
-            "description": "Users in HK region are logged out before session initialization.",
-            "steps": "1) Login\n2) Wait for redirect\n3) Session expires",
-        },
-        {
-            "report_id": "BT-RP-2440",
-            "title": "Export CSV has wrong delimiter",
-            "version": "v1.4.2-beta",
-            "tester_id": "tester-020",
-            "tester_email": "qa@example.com",
+            "report_id": "BT-RP-1001",
+            "title": "Unable to search",
+            "version": "0.9.0",
+            "tester_id": "Tester_1",
+            "tester_email": "icyreward@gmail.com",
             "status": DefectStatus.ASSIGNED,
-            "severity": Severity.MEDIUM,
-            "priority": Priority.P2,
-            "backlog_ref": "BETA-251",
-            "assignee_id": "dev-001",
-            "description": "CSV export uses semicolon and breaks spreadsheet import in default locale.",
-            "steps": "1) Export report\n2) Open in Excel\n3) Values collapse into one column",
+            "severity": "Major",
+            "priority": "High",
+            "assignee_id": DEMO_PRIMARY_DEVELOPER_ID,
+            "received_at": _demo_dt("2026-03-25T10:53:00+08:00"),
+            "decided_at": _demo_dt("2026-03-25T11:05:00+08:00"),
+            "description": "Search button unresponsive after completing an initial search",
+            "steps": "1. Complete a search\n2. Modify search criteria\n3. Click Search button",
         },
         {
-            "report_id": "BT-RP-2421",
-            "title": "Search index not refreshed",
-            "version": "v1.4.1-beta",
-            "tester_id": "tester-003",
-            "tester_email": "tester3@example.com",
-            "status": DefectStatus.FIXED,
-            "severity": Severity.LOW,
-            "priority": Priority.P3,
-            "backlog_ref": "BETA-199",
-            "assignee_id": "dev-004",
-            "fix_note": "Invalidate index cache after save.",
-            "description": "Recent updates are not searchable until a full reindex job runs.",
-            "steps": "1) Update content\n2) Search with keyword\n3) No result",
-        },
-        {
-            "report_id": "BT-RP-2475",
-            "title": "Notification badge count is off by one",
-            "version": "v1.4.3-beta",
-            "tester_id": "tester-031",
-            "tester_email": "tester31@example.com",
-            "status": DefectStatus.OPEN,
-            "severity": Severity.MEDIUM,
-            "priority": Priority.P2,
-            "backlog_ref": "BETA-312",
-            "description": "Header badge shows one extra unread item after viewing latest alert.",
-            "steps": "1) Open notifications\n2) Read newest alert\n3) Return to dashboard",
-        },
-        {
-            "report_id": "BT-RP-2476",
-            "title": "Dark text overlaps chart legend on small screens",
-            "version": "v1.4.3-beta",
-            "tester_id": "tester-044",
-            "status": DefectStatus.RESOLVED,
-            "severity": Severity.LOW,
-            "priority": Priority.P3,
-            "backlog_ref": "BETA-318",
-            "assignee_id": "dev-001",
-            "fix_note": "Adjusted legend spacing and font size breakpoints.",
-            "retest_note": "Verified on 390x844 viewport.",
-            "description": "Analytics chart legend overlaps labels in mobile layout.",
-            "steps": "1) Open analytics page on phone\n2) Switch to weekly chart\n3) Observe legend overlap",
+            "report_id": "BT-RP-1002",
+            "title": "Poor readability in dark mode",
+            "version": "0.9.0",
+            "tester_id": "Tester_2",
+            "status": DefectStatus.NEW,
+            "received_at": _demo_dt("2026-03-25T20:17:00+08:00"),
+            "description": "Text unclear in dark mode due to lack of contrast with background",
+            "steps": "1. Enable dark mode\n2. Display text",
         },
     ]
 
@@ -156,6 +124,30 @@ def _ensure_demo_users() -> None:
             user.save(update_fields=["password"])
         for group in groups:
             user.groups.add(group)
+
+
+def _remove_legacy_demo_seed() -> None:
+    legacy_product = Product.objects.filter(product_id=LEGACY_DEMO_PRODUCT_ID).first()
+    if legacy_product is not None:
+        legacy_defects = DefectReport.objects.filter(product=legacy_product)
+        DefectComment.objects.filter(defect__in=legacy_defects).delete()
+        DefectStatusHistory.objects.filter(defect__in=legacy_defects).delete()
+        legacy_defects.delete()
+        ProductDeveloper.objects.filter(product=legacy_product).delete()
+        legacy_product.delete()
+
+    stale_reports = DefectReport.objects.filter(report_id__in=LEGACY_DEMO_REPORT_IDS)
+    if stale_reports.exists():
+        DefectComment.objects.filter(defect__in=stale_reports).delete()
+        DefectStatusHistory.objects.filter(defect__in=stale_reports).delete()
+        stale_reports.delete()
+
+
+def _demo_dt(value: str):
+    parsed = parse_datetime(value)
+    if parsed is not None:
+        return parsed
+    return timezone.make_aware(datetime.fromisoformat(value), timezone.get_current_timezone())
 
 
 def next_report_id() -> str:

@@ -29,7 +29,7 @@ class DefectApiTests(TestCase):
     def test_submit_defect_missing_required_fields_returns_400(self):
         response = self.client.post(
             self.create_url,
-            data=json.dumps({"product_id": "PRD-1007"}),
+            data=json.dumps({"product_id": "Prod_1"}),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 400)
@@ -56,7 +56,7 @@ class DefectApiTests(TestCase):
 
     def test_submit_defect_success_stored_as_new(self):
         payload = {
-            "product_id": "PRD-1007",
+            "product_id": "Prod_1",
             "version": "v1.5.0-beta",
             "title": "UI glitch",
             "description": "visual issue",
@@ -79,6 +79,15 @@ class DefectApiTests(TestCase):
         self.assertEqual(response.status_code, 403)
 
     def test_list_open_defects_for_developer(self):
+        action_url = reverse("defects:api-defect-action", kwargs={"defect_id": "BT-RP-1002"})
+        self.client.force_login(self.owner_user)
+        accept_response = self.client.post(
+            action_url,
+            data=json.dumps({"action": "accept_open", "severity": "High", "priority": "P1"}),
+            content_type="application/json",
+        )
+        self.assertEqual(accept_response.status_code, 200)
+
         self.client.force_login(self.dev_user)
         response = self.client.get(self.list_url, {"status": "Open", "developer_id": "dev-001"})
         self.assertEqual(response.status_code, 200)
@@ -92,11 +101,20 @@ class DefectApiTests(TestCase):
         self.assertIn("cannot access New", response.json()["error"])
 
     def test_take_ownership_requires_team_membership(self):
+        accept_url = reverse("defects:api-defect-action", kwargs={"defect_id": "BT-RP-1002"})
+        self.client.force_login(self.owner_user)
+        accept_response = self.client.post(
+            accept_url,
+            data=json.dumps({"action": "accept_open", "severity": "High", "priority": "P1"}),
+            content_type="application/json",
+        )
+        self.assertEqual(accept_response.status_code, 200)
+
         user_model = get_user_model()
         outsider = user_model.objects.create_user(username="dev-999", password="Pass1234!")
         outsider.groups.add(Group.objects.get(name="developer"))
         self.client.force_login(outsider)
-        action_url = reverse("defects:api-defect-action", kwargs={"defect_id": "BT-RP-2462"})
+        action_url = reverse("defects:api-defect-action", kwargs={"defect_id": "BT-RP-1002"})
         response = self.client.post(
             action_url,
             data=json.dumps({"action": "take_ownership"}),
@@ -106,7 +124,16 @@ class DefectApiTests(TestCase):
         self.assertIn("product team", response.json()["error"])
 
     def test_lifecycle_open_to_assigned_to_fixed_to_resolved(self):
-        action_url = reverse("defects:api-defect-action", kwargs={"defect_id": "BT-RP-2462"})
+        action_url = reverse("defects:api-defect-action", kwargs={"defect_id": "BT-RP-1002"})
+        self.client.force_login(self.owner_user)
+        response = self.client.post(
+            action_url,
+            data=json.dumps({"action": "accept_open", "severity": "High", "priority": "P1"}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["status"], DefectStatus.OPEN)
+
         self.client.force_login(self.dev_user)
         response = self.client.post(
             action_url,

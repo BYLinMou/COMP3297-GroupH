@@ -118,12 +118,12 @@ Request example:
 
 ```json
 {
-  "product_id": "PRD-1007",
-  "version": "v1.5.0-beta",
-  "title": "App crash when saving profile",
-  "description": "App exits after pressing Save.",
-  "steps": "1) Open profile 2) Edit name 3) Save",
-  "tester_id": "tester-009",
+  "product_id": "Prod_1",
+  "version": "0.9.0",
+  "title": "Poor readability in dark mode",
+  "description": "Text unclear in dark mode due to lack of contrast with background",
+  "steps": "1) Enable dark mode 2) Display text",
+  "tester_id": "Tester_2",
   "email": "tester@example.com"
 }
 ```
@@ -150,16 +150,16 @@ Response `200`:
 {
   "items": [
     {
-      "report_id": "BT-RP-2462",
-      "title": "Login timeout in beta region",
-      "product_id": "PRD-1007",
-      "version": "v1.4.2-beta",
-      "tester_id": "tester-014",
-      "status": "Open",
-      "severity": "High",
-      "priority": "P1",
+      "report_id": "BT-RP-1002",
+      "title": "Poor readability in dark mode",
+      "product_id": "Prod_1",
+      "version": "0.9.0",
+      "tester_id": "Tester_2",
+      "status": "New",
+      "severity": "",
+      "priority": "",
       "assignee_id": "",
-      "received_at": "2026-03-25T01:23:45.000000+08:00"
+      "received_at": "2026-03-25T20:17:00+08:00"
     }
   ]
 }
@@ -201,7 +201,7 @@ Response `200`:
 ```json
 {
   "message": "Defect moved to Fixed.",
-  "report_id": "BT-RP-2462",
+  "report_id": "BT-RP-1001",
   "status": "Fixed"
 }
 ```
@@ -230,17 +230,13 @@ Seeded records include:
 
 - Roles: `owner`, `developer`
 - Product:
-  - `PRD-1007` (name: `BetaTrax Demo Product`, owner: `owner-001`)
+  - `Prod_1` (name: `BetaTrax Demo Product`, owner: `owner-001`)
 - Product developers:
   - `dev-001`
-  - `dev-004`
-- Defect reports (inserted only when `DefectReport` table is empty):
-  - `BT-RP-2471` (`New`)
-  - `BT-RP-2462` (`Open`)
-  - `BT-RP-2440` (`Assigned`)
-  - `BT-RP-2421` (`Fixed`)
-  - `BT-RP-2475` (`Open`)
-  - `BT-RP-2476` (`Resolved`)
+  - Demo team account kept separately: `dev-004` (not linked to `Prod_1`)
+- Defect reports (inserted only when `Prod_1` has no defect reports yet):
+  - `BT-RP-1001` (`Assigned`) - `Unable to search`
+  - `BT-RP-1002` (`New`) - `Poor readability in dark mode`
 
 Notes:
 
@@ -269,7 +265,7 @@ The following limitations are present in this Sprint 1 executable:
 1. Product registration and user registration are not implemented in API/UI.
     Products and users are created through Django Admin as per course instruction.
 
-2. The executable is prepared for Sprint 1 with a single demo product (`PRD-1007`).
+2. The executable is prepared for Sprint 1 with a single demo product (`Prod_1`).
     Multi-product support exists in data model, but full multi-product admin workflows are not part of Sprint 1 scope.
 
 3. Email notifications:

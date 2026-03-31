@@ -7,7 +7,14 @@ from rest_framework.views import APIView
 from .authz import actor_from_user
 from .models import DefectReport, Product
 from .serializers import DefectActionSerializer, DefectCreateSerializer
-from .services import STATUS_BY_SLUG, apply_action, create_defect, ensure_demo_seed, serialize_defect_for_api
+from .services import (
+    STATUS_BY_SLUG,
+    apply_action,
+    create_defect,
+    ensure_demo_seed,
+    serialize_defect_detail_for_api,
+    serialize_defect_for_api,
+)
 
 
 class DefectCreateApi(APIView):
@@ -92,6 +99,31 @@ class DefectListApi(APIView):
             queryset = queryset.filter(product__developers__developer_id=actor.actor_id).distinct()
 
         return Response({"items": [serialize_defect_for_api(defect) for defect in queryset]})
+
+
+class DefectDetailApi(APIView):
+    permission_classes = [IsAuthenticated]
+
+    def get(self, request, defect_id):
+        ensure_demo_seed()
+        defect = DefectReport.objects.select_related("product").filter(report_id=defect_id).first()
+        if defect is None:
+            return Response({"error": "Defect not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        actor = actor_from_user(request.user)
+        if not actor.is_owner and not actor.is_developer:
+            return Response({"error": "Only Product Owner or Developer can view defect details."}, status=status.HTTP_403_FORBIDDEN)
+
+        if actor.is_owner:
+            if defect.product.owner_id != actor.actor_id:
+                return Response({"error": "Defect not found."}, status=status.HTTP_404_NOT_FOUND)
+        elif actor.is_developer:
+            if defect.status == "New":
+                return Response({"error": "Developer cannot access New defects."}, status=status.HTTP_403_FORBIDDEN)
+            if not defect.product.developers.filter(developer_id=actor.actor_id).exists():
+                return Response({"error": "Defect not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        return Response(serialize_defect_detail_for_api(defect))
 
 
 class DefectActionApi(APIView):

@@ -196,6 +196,27 @@ def serialize_defect_for_api(defect: DefectReport) -> dict[str, Any]:
     }
 
 
+def serialize_defect_detail_for_api(defect: DefectReport) -> dict[str, Any]:
+    return {
+        "report_id": defect.report_id,
+        "product_id": defect.product_id,
+        "version": defect.version,
+        "title": defect.title,
+        "description": defect.description,
+        "steps": defect.steps,
+        "tester_id": defect.tester_id,
+        "email": defect.tester_email,
+        "status": defect.status,
+        "severity": defect.severity,
+        "priority": defect.priority,
+        "assignee_id": defect.assignee_id,
+        "fix_note": defect.fix_note,
+        "retest_note": defect.retest_note,
+        "received_at": defect.received_at.isoformat(),
+        "decided_at": defect.decided_at.isoformat() if defect.decided_at else None,
+    }
+
+
 def create_defect(data: dict[str, Any]) -> DefectReport:
     report_id = next_report_id()
     defect = DefectReport.objects.create(

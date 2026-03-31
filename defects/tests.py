@@ -14,6 +14,7 @@ class DefectApiTests(TestCase):
         self.client = Client()
         self.create_url = reverse("defects:api-create-defect")
         self.list_url = reverse("defects:api-list-defects")
+        self.detail_url = lambda defect_id: reverse("defects:api-defect-detail", kwargs={"defect_id": defect_id})
         ensure_demo_seed()
 
         owner_group = Group.objects.get(name="owner")
@@ -93,6 +94,21 @@ class DefectApiTests(TestCase):
         self.assertEqual(response.status_code, 200)
         items = response.json()["items"]
         self.assertTrue(any(item["status"] == DefectStatus.OPEN for item in items))
+
+    def test_owner_can_get_defect_detail(self):
+        self.client.force_login(self.owner_user)
+        response = self.client.get(self.detail_url("BT-RP-1002"))
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["report_id"], "BT-RP-1002")
+        self.assertIn("description", body)
+        self.assertIn("steps", body)
+
+    def test_developer_cannot_get_new_defect_detail(self):
+        self.client.force_login(self.dev_user)
+        response = self.client.get(self.detail_url("BT-RP-1002"))
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("cannot access New", response.json()["error"])
 
     def test_developer_cannot_list_new(self):
         self.client.force_login(self.dev_user)

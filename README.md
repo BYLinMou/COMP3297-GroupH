@@ -101,7 +101,7 @@ The app will be available at `http://127.0.0.1:8000/`.
 
 Base path: `/api/defects/`
 
-Testing commands for Sprint 1 acceptance criteria are provided in [testcasecommand.txt](testcasecommand.txt) (using demo website 2).
+Testing commands for Sprint 1 acceptance criteria are provided in [testcasecommand.txt](documents/testcasecommand.txt), [Sprint1_Demo_API.ipynb](documents/Sprint1_Demo_API.ipynb) (using demo website 2).
 
 ### 1) Create defect report
 

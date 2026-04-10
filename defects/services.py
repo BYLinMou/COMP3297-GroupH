@@ -78,7 +78,7 @@ def ensure_demo_seed() -> None:
             "title": "Unable to search",
             "version": "0.9.0",
             "tester_id": "Tester_1",
-            "tester_email": "icyreward@gmail.com",
+            "tester_email": "example@gmail.com",
             "status": DefectStatus.ASSIGNED,
             "severity": "Major",
             "priority": "High",

@@ -1,6 +1,12 @@
 ﻿{% extends 'frontend/base.html' %}
 
 {% block title %}BetaTrax - Defect Board{% endblock %}
+{% block header_actions %}
+{% if is_owner %}
+<a class="action-link" href="{% url 'frontend:register-product' %}">Register Product</a>
+<a class="action-link primary" href="{% url 'frontend:create-defect' %}">Create Defect</a>
+{% endif %}
+{% endblock %}
 
 {% block content %}
 <section class="card hero">

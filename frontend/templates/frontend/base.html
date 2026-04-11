@@ -29,7 +29,6 @@
         </div>
         <div class="top-links">
           {% block header_actions %}{% endblock %}
-          {# External system submits New defects; internal UI does not expose create-new in Sprint 1. #}
           {% if request.user.is_authenticated %}
           <a class="action-link" href="{% url 'frontend:sign-out' %}">Sign Out</a>
           {% else %}

@@ -3,26 +3,45 @@ from rest_framework import status
 from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.views import APIView
-
+from .services import register_product
 from .authz import actor_from_user
 from .models import DefectReport, Product
+from django.core.exceptions import ValidationError
 from .serializers import DefectActionSerializer, DefectCreateSerializer
 from .services import (
     STATUS_BY_SLUG,
     apply_action,
     create_defect,
-    ensure_demo_seed,
     serialize_defect_detail_for_api,
     serialize_defect_for_api,
 )
 
+class ProductRegisterApi(APIView):
+    permission_classes = [IsAuthenticated]
 
+    def post(self, request):
+        actor = actor_from_user(request.user)
+        if not actor.is_owner:
+            return Response({"error": "Only Product Owner can register products"}, status=403)
+
+        try:
+            product = register_product(
+                owner_user=request.user,
+                product_id=request.data.get('product_id'),
+                product_name=request.data.get('name'),
+                developer_ids=request.data.get('developers', [])
+            )
+            return Response({"message": "Product registered successfully", "product_id": product.product_id}, status=201)
+        except ValidationError as e:
+            detail = e.messages[0] if getattr(e, "messages", None) else str(e)
+            return Response({"error": detail}, status=400)
+        
 class DefectCreateApi(APIView):
     permission_classes = [AllowAny]
 
     @transaction.atomic
     def post(self, request):
-        ensure_demo_seed()
+
 
         serializer = DefectCreateSerializer(data=request.data)
         if not serializer.is_valid():
@@ -65,7 +84,6 @@ class DefectListApi(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request):
-        ensure_demo_seed()
         actor = actor_from_user(request.user)
         if not actor.is_owner and not actor.is_developer:
             return Response({"error": "Only Product Owner or Developer can view defects."}, status=status.HTTP_403_FORBIDDEN)
@@ -105,7 +123,6 @@ class DefectDetailApi(APIView):
     permission_classes = [IsAuthenticated]
 
     def get(self, request, defect_id):
-        ensure_demo_seed()
         defect = DefectReport.objects.select_related("product").filter(report_id=defect_id).first()
         if defect is None:
             return Response({"error": "Defect not found."}, status=status.HTTP_404_NOT_FOUND)
@@ -131,7 +148,6 @@ class DefectActionApi(APIView):
 
     @transaction.atomic
     def post(self, request, defect_id):
-        ensure_demo_seed()
         defect = DefectReport.objects.select_related("product").filter(report_id=defect_id).first()
         if defect is None:
             return Response({"error": "Defect not found."}, status=status.HTTP_404_NOT_FOUND)

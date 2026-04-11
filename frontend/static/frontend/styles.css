@@ -209,6 +209,26 @@ button:hover, .action-link:hover { transform: translateY(-1px); }
   min-height: 44px;
 }
 
+.picker-list {
+  display: grid;
+  gap: 8px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  padding: 10px;
+  background: #fbfcfa;
+}
+
+.picker-item {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+}
+
+.picker-item input[type="checkbox"] {
+  width: auto;
+  margin-top: 2px;
+}
+
 .comment-item {
   border-top: 1px solid var(--line);
   padding: 10px 0;

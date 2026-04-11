@@ -7,6 +7,7 @@ from django.contrib.auth.models import Group
 from django.core.mail import send_mail
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 
 from .authz import ActorContext, ROLE_DEVELOPER, ROLE_OWNER
 from .models import (
@@ -48,61 +49,9 @@ LEGACY_DEMO_REPORT_IDS = {
     "BT-RP-2476",
 }
 
-
 def ensure_demo_seed() -> None:
     _ensure_demo_users()
     _remove_legacy_demo_seed()
-    product, _ = Product.objects.get_or_create(
-        product_id=DEMO_PRODUCT_ID,
-        defaults={"name": "BetaTrax Demo Product", "owner_id": DEMO_OWNER_ID},
-    )
-    fields_to_update = []
-    if product.owner_id != DEMO_OWNER_ID:
-        product.owner_id = DEMO_OWNER_ID
-        fields_to_update.append("owner_id")
-    if product.name != "BetaTrax Demo Product":
-        product.name = "BetaTrax Demo Product"
-        fields_to_update.append("name")
-    if fields_to_update:
-        product.save(update_fields=fields_to_update)
-
-    ProductDeveloper.objects.get_or_create(product=product, developer_id=DEMO_PRIMARY_DEVELOPER_ID)
-    ProductDeveloper.objects.filter(product=product).exclude(developer_id=DEMO_PRIMARY_DEVELOPER_ID).delete()
-
-    if DefectReport.objects.filter(product=product).exists():
-        return
-
-    seed_defects = [
-        {
-            "report_id": "BT-RP-1001",
-            "title": "Unable to search",
-            "version": "0.9.0",
-            "tester_id": "Tester_1",
-            "tester_email": "example@gmail.com",
-            "status": DefectStatus.ASSIGNED,
-            "severity": "Major",
-            "priority": "High",
-            "assignee_id": DEMO_PRIMARY_DEVELOPER_ID,
-            "received_at": _demo_dt("2026-03-25T10:53:00+08:00"),
-            "decided_at": _demo_dt("2026-03-25T11:05:00+08:00"),
-            "description": "Search button unresponsive after completing an initial search",
-            "steps": "1. Complete a search\n2. Modify search criteria\n3. Click Search button",
-        },
-        {
-            "report_id": "BT-RP-1002",
-            "title": "Poor readability in dark mode",
-            "version": "0.9.0",
-            "tester_id": "Tester_2",
-            "status": DefectStatus.NEW,
-            "received_at": _demo_dt("2026-03-25T20:17:00+08:00"),
-            "description": "Text unclear in dark mode due to lack of contrast with background",
-            "steps": "1. Enable dark mode\n2. Display text",
-        },
-    ]
-
-    for row in seed_defects:
-        DefectReport.objects.create(product=product, **row)
-
 
 def _ensure_demo_users() -> None:
     owner_group, _ = Group.objects.get_or_create(name=ROLE_OWNER)
@@ -410,3 +359,58 @@ def apply_action(defect: DefectReport, action: str, payload: dict[str, Any], act
         return "Comment added."
 
     raise ValueError("Unknown action.")
+
+def register_product(owner_user, product_id, product_name, developer_ids):
+    owner_id = (getattr(owner_user, "username", "") or "").strip()
+    product_id = (product_id or "").strip()
+    product_name = (product_name or "").strip()
+
+    if not owner_id:
+        raise ValidationError("无效的产品负责人账号。")
+    if not product_id:
+        raise ValidationError("product_id 不能为空。")
+    if not product_name:
+        raise ValidationError("name 不能为空。")
+
+    # Rule 1: one owner can register at most one product in this flow.
+    if Product.objects.filter(owner_id=owner_id).exists():
+        raise ValidationError("您已经注册过一个产品，无法注册更多。")
+
+    # Rule 2: Product ID must be unique.
+    if Product.objects.filter(product_id=product_id).exists():
+        raise ValidationError("该 Product ID 已被其他产品使用。")
+
+    if developer_ids is None:
+        developer_ids = []
+    if not isinstance(developer_ids, list):
+        raise ValidationError("developers 必须是数组。")
+    developer_ids = list(dict.fromkeys(developer_ids))
+
+    # Rule 3: developers must exist, be in developer group, and unassigned.
+    user_model = get_user_model()
+    developers_to_assign: list[str] = []
+    for raw_dev_id in developer_ids:
+        developer_id = str(raw_dev_id).strip()
+        if not developer_id:
+            raise ValidationError("开发者ID不能为空。")
+
+        dev = user_model.objects.filter(username=developer_id).first()
+        if not dev or not dev.groups.filter(name=ROLE_DEVELOPER).exists():
+            raise ValidationError(f"找不到开发者账号 {developer_id}。")
+
+        if ProductDeveloper.objects.filter(developer_id=developer_id).exists():
+            raise ValidationError(f"开发者 {developer_id} 已经被分配给其他产品。")
+
+        developers_to_assign.append(developer_id)
+
+    # Create product and bind developers using username IDs.
+    new_product = Product.objects.create(
+        product_id=product_id,
+        name=product_name,
+        owner_id=owner_id,
+    )
+
+    for developer_id in developers_to_assign:
+        ProductDeveloper.objects.create(product=new_product, developer_id=developer_id)
+
+    return new_product

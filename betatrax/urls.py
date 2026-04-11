@@ -14,16 +14,16 @@ Including another URLconf
     1. Import the include() function: from django.urls import include, path
     2. Add a URL to urlpatterns:  path('blog/', include('blog.urls'))
 """
-from pathlib import Path
-
 from django.conf import settings
 from django.contrib import admin
+from django.contrib.staticfiles.views import serve as staticfiles_serve
 from django.urls import include, path
-from django.views.static import serve
+from defects.views import ProductRegisterApi
 
 urlpatterns = [
     path('admin/', admin.site.urls),
     path('api/defects/', include('defects.urls')),
+    path('api/products/register/', ProductRegisterApi.as_view(), name='api-product-register-root'),
     path('', include('frontend.urls')),
 ]
 
@@ -31,7 +31,7 @@ if not settings.DEBUG:
     urlpatterns += [
         path(
             "static/<path:path>",
-            serve,
-            {"document_root": Path(settings.BASE_DIR) / "frontend" / "static"},
+            staticfiles_serve,
+            {"insecure": True},
         )
     ]

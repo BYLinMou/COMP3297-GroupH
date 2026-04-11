@@ -1,25 +1,27 @@
 from django.contrib import messages
+from django.contrib.auth import get_user_model
 from django.contrib.auth import authenticate, login, logout
 from django.contrib.auth.decorators import login_required
+from django.contrib.auth.models import Group
+from django.core.exceptions import ValidationError
 from django.db import transaction
 from django.http import Http404
 from django.shortcuts import redirect, render
 
-from defects.authz import actor_from_user
-from defects.models import DefectReport, Product
+from defects.authz import ROLE_DEVELOPER, actor_from_user
+from defects.models import DefectReport, Product, ProductDeveloper
 from defects.services import (
     REQUIRED_CREATE_FIELDS,
     STATUS_BY_SLUG,
     apply_action,
     create_defect as create_defect_record,
-    ensure_demo_seed,
+    register_product as register_product_service,
     serialize_defect,
 )
 
 
 @login_required(login_url="frontend:external-auth")
 def home(request):
-    ensure_demo_seed()
     actor = actor_from_user(request.user)
     if not actor.is_owner and not actor.is_developer:
         messages.error(request, "Only Product Owner or Developer can access the defect board.")
@@ -45,12 +47,75 @@ def home(request):
     return render(
         request,
         "frontend/home.html",
-        {"defects": defects, "selected_status": selected},
+        {"defects": defects, "selected_status": selected, "is_owner": actor.is_owner},
     )
 
 
+@login_required(login_url="frontend:external-auth")
+@transaction.atomic
+def register_product(request):
+    actor = actor_from_user(request.user)
+    if not actor.is_owner:
+        messages.error(request, "Only Product Owner can register products.")
+        return redirect("frontend:home")
+
+    assigned_map = {
+        row["developer_id"]: row["product__product_id"]
+        for row in ProductDeveloper.objects.select_related("product").values("developer_id", "product__product_id")
+    }
+
+    user_model = get_user_model()
+    developer_group = Group.objects.filter(name=ROLE_DEVELOPER).first()
+    if developer_group is None:
+        developers = []
+    else:
+        developers = [
+            {
+                "username": user.username,
+                "assigned_product": assigned_map.get(user.username, ""),
+            }
+            for user in user_model.objects.filter(groups=developer_group).order_by("username")
+        ]
+
+    if request.method != "POST":
+        return render(
+            request,
+            "frontend/register_product.html",
+            {"developers": developers},
+        )
+
+    product_id = (request.POST.get("product_id") or "").strip()
+    product_name = (request.POST.get("name") or "").strip()
+    developer_ids = [value.strip() for value in request.POST.getlist("developers") if value.strip()]
+
+    try:
+        product = register_product_service(
+            owner_user=request.user,
+            product_id=product_id,
+            product_name=product_name,
+            developer_ids=developer_ids,
+        )
+    except ValidationError as exc:
+        detail = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+        messages.error(request, detail)
+        return render(
+            request,
+            "frontend/register_product.html",
+            {
+                "developers": developers,
+                "submitted": {
+                    "product_id": product_id,
+                    "name": product_name,
+                    "developers": set(developer_ids),
+                },
+            },
+        )
+
+    messages.success(request, f"Product {product.product_id} registered successfully.")
+    return redirect("frontend:home")
+
+
 def external_auth(request):
-    ensure_demo_seed()
     if request.method == "POST":
         username = (request.POST.get("username") or "").strip()
         password = request.POST.get("password") or ""
@@ -73,7 +138,6 @@ def sign_out(request):
 @login_required(login_url="frontend:external-auth")
 @transaction.atomic
 def create_defect(request):
-    ensure_demo_seed()
     actor = actor_from_user(request.user)
     if not actor.is_owner:
         messages.error(request, "Only Product Owner can create new defects from this screen.")
@@ -112,7 +176,6 @@ def create_defect(request):
 @login_required(login_url="frontend:external-auth")
 @transaction.atomic
 def defect_detail(request, defect_id):
-    ensure_demo_seed()
     defect = DefectReport.objects.select_related("product").filter(report_id=defect_id).first()
     if defect is None:
         raise Http404("Defect not found")

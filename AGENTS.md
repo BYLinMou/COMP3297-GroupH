@@ -358,3 +358,47 @@ do this successfully. Also, since there is a quiz during the sprint, we understa
 may need a little more time to work on the implementation. However, Sprint 2 will still
 begin on March 26 to enable some team members to begin working on it while others
 refine the Sprint 1 code.)
+
+---
+
+Sprint 2:
+COMP3297 Software Engineering
+School of Computing and Data Science
+Department of Computer Science
+Sprint 2 Task Sheet: BetaTrax
+Sprint 2 Overview:
+Thank you for your work during Sprint 1. We look forward to your demo in our Review Meeting next week.
+Sprint 2 is straightforward since it simply follows the pattern of Sprint 1 to complete development of Release 1
+of BetaTrax as a Minimum Marketable Product. By doing so you will clear the Release 1 Product Backlog.
+Tasks for Sprint 2:
+Backlog Refinement
+Your backlog contains the remaining PBIs for Release 1, mostly as use case slices. If you have not included
+user authentication yet, you must add this functionality to the backlog now. Then, as in Sprint 1:
+o Split any unsliced use cases.
+o Write all slices as one or more User Stories. Include a Confirmation section for each
+of those Stories.
+And, new for Sprint 2:
+o Add a new column to your backlog labelled Estimate. For each PBI in the backlog,
+estimate its relative size in Story Points and record your estimate in this column.
+Note: You will continue to register users through Django Admin, however you are required to
+support product registration by Product Owner in Release 1. You may continue to write all
+emails to the console or to a file if you wish.
+Sprint Planning
+Decompose the stories and other PBIs you will bring into the Sprint into Tasks (Sub-Tasks if you are using
+Jira). Record the member responsible for completing each Task. For future planning, keep a note of the efforthours taken for each Task during the sprint.
+Analysis: Domain Model
+Again, as before but now working from your user stories for Sprint 2, identify any new conceptual classes and
+add them to your Domain Model together with their attributes and associations. You may also take the opportunity
+to revise your previous model before adding the new classes.
+Implementation
+Design the remaining APIs for Sprint 2 and their realizations. Implement and integrate them into your previous
+increment together with any changes needed to that increment. As in Sprint 1, deliver your source code by
+zipping the root directory of your Django project. Do not include a .git directory or similar. Include a Readme
+file outlining any limitations of your Sprint 2 executable with respect to the requirements.SUMMARY OF SPRINT 2 DELIVERABLES
+ Product Backlog before taking PBIs into the Sprint.
+ Sprint Backlog showing the tasks resulting from decomposing the PBIs, and their allocation to members.
+ Revised and extended Partial Domain Model
+ Source code and Readme file
+ List of team members’ contributions
+Handin Method: Via Moodle, only one submission per team.
+Deadline: April 13, 23:59

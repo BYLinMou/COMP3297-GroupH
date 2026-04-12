@@ -7,6 +7,7 @@ from django.contrib.auth.models import Group
 from django.core.mail import send_mail
 from django.utils.dateparse import parse_datetime
 from django.utils import timezone
+from django.core.exceptions import ValidationError
 
 from .authz import ActorContext, ROLE_DEVELOPER, ROLE_OWNER
 from .models import (
@@ -48,61 +49,9 @@ LEGACY_DEMO_REPORT_IDS = {
     "BT-RP-2476",
 }
 
-
 def ensure_demo_seed() -> None:
     _ensure_demo_users()
     _remove_legacy_demo_seed()
-    product, _ = Product.objects.get_or_create(
-        product_id=DEMO_PRODUCT_ID,
-        defaults={"name": "BetaTrax Demo Product", "owner_id": DEMO_OWNER_ID},
-    )
-    fields_to_update = []
-    if product.owner_id != DEMO_OWNER_ID:
-        product.owner_id = DEMO_OWNER_ID
-        fields_to_update.append("owner_id")
-    if product.name != "BetaTrax Demo Product":
-        product.name = "BetaTrax Demo Product"
-        fields_to_update.append("name")
-    if fields_to_update:
-        product.save(update_fields=fields_to_update)
-
-    ProductDeveloper.objects.get_or_create(product=product, developer_id=DEMO_PRIMARY_DEVELOPER_ID)
-    ProductDeveloper.objects.filter(product=product).exclude(developer_id=DEMO_PRIMARY_DEVELOPER_ID).delete()
-
-    if DefectReport.objects.filter(product=product).exists():
-        return
-
-    seed_defects = [
-        {
-            "report_id": "BT-RP-1001",
-            "title": "Unable to search",
-            "version": "0.9.0",
-            "tester_id": "Tester_1",
-            "tester_email": "example@gmail.com",
-            "status": DefectStatus.ASSIGNED,
-            "severity": "Major",
-            "priority": "High",
-            "assignee_id": DEMO_PRIMARY_DEVELOPER_ID,
-            "received_at": _demo_dt("2026-03-25T10:53:00+08:00"),
-            "decided_at": _demo_dt("2026-03-25T11:05:00+08:00"),
-            "description": "Search button unresponsive after completing an initial search",
-            "steps": "1. Complete a search\n2. Modify search criteria\n3. Click Search button",
-        },
-        {
-            "report_id": "BT-RP-1002",
-            "title": "Poor readability in dark mode",
-            "version": "0.9.0",
-            "tester_id": "Tester_2",
-            "status": DefectStatus.NEW,
-            "received_at": _demo_dt("2026-03-25T20:17:00+08:00"),
-            "description": "Text unclear in dark mode due to lack of contrast with background",
-            "steps": "1. Enable dark mode\n2. Display text",
-        },
-    ]
-
-    for row in seed_defects:
-        DefectReport.objects.create(product=product, **row)
-
 
 def _ensure_demo_users() -> None:
     owner_group, _ = Group.objects.get_or_create(name=ROLE_OWNER)
@@ -410,3 +359,58 @@ def apply_action(defect: DefectReport, action: str, payload: dict[str, Any], act
         return "Comment added."
 
     raise ValueError("Unknown action.")
+
+def register_product(owner_user, product_id, product_name, developer_ids):
+    owner_id = (getattr(owner_user, "username", "") or "").strip()
+    product_id = (product_id or "").strip()
+    product_name = (product_name or "").strip()
+
+    if not owner_id:
+        raise ValidationError("Invalid product owner account.")
+    if not product_id:
+        raise ValidationError("product_id cannot be empty.")
+    if not product_name:
+        raise ValidationError("name cannot be empty.")
+
+    # Rule 1: one owner can register at most one product in this flow.
+    if Product.objects.filter(owner_id=owner_id).exists():
+        raise ValidationError("You have already registered a product and cannot register another.")
+
+    # Rule 2: Product ID must be unique.
+    if Product.objects.filter(product_id=product_id).exists():
+        raise ValidationError("This Product ID is already in use by another product.")
+
+    if developer_ids is None:
+        developer_ids = []
+    if not isinstance(developer_ids, list):
+        raise ValidationError("developers must be an array.")
+    developer_ids = list(dict.fromkeys(developer_ids))
+
+    # Rule 3: developers must exist, be in developer group, and unassigned.
+    user_model = get_user_model()
+    developers_to_assign: list[str] = []
+    for raw_dev_id in developer_ids:
+        developer_id = str(raw_dev_id).strip()
+        if not developer_id:
+            raise ValidationError("Developer ID cannot be empty.")
+
+        dev = user_model.objects.filter(username=developer_id).first()
+        if not dev or not dev.groups.filter(name=ROLE_DEVELOPER).exists():
+            raise ValidationError(f"Developer account {developer_id} was not found.")
+
+        if ProductDeveloper.objects.filter(developer_id=developer_id).exists():
+            raise ValidationError(f"Developer {developer_id} is already assigned to another product.")
+
+        developers_to_assign.append(developer_id)
+
+    # Create product and bind developers using username IDs.
+    new_product = Product.objects.create(
+        product_id=product_id,
+        name=product_name,
+        owner_id=owner_id,
+    )
+
+    for developer_id in developers_to_assign:
+        ProductDeveloper.objects.create(product=new_product, developer_id=developer_id)
+
+    return new_product

@@ -1,0 +1,58 @@
+{% extends 'frontend/base.html' %}
+
+{% block title %}Register Product - BetaTrax{% endblock %}
+{% block header_actions %}
+<a class="action-link" href="{% url 'frontend:home' %}">Home</a>
+{% endblock %}
+
+{% block content %}
+<section class="card hero">
+  <h1>Register Product</h1>
+  <p>Create a product and assign available developers. One owner can register at most one product.</p>
+</section>
+
+<section class="card">
+  <form method="post" action="{% url 'frontend:register-product' %}" class="form-grid">
+    {% csrf_token %}
+    <div class="field">
+      <label>Product ID</label>
+      <input name="product_id" placeholder="Prod_2" value="{% if submitted %}{{ submitted.product_id }}{% endif %}" required />
+    </div>
+    <div class="field">
+      <label>Product Name</label>
+      <input name="name" placeholder="BetaTrax Product" value="{% if submitted %}{{ submitted.name }}{% endif %}" required />
+    </div>
+
+    <div class="field">
+      <label>Assign Developers</label>
+      <div class="picker-list">
+        {% for developer in developers %}
+        <label class="picker-item">
+          <input
+            type="checkbox"
+            name="developers"
+            value="{{ developer.username }}"
+            {% if developer.assigned_product %}disabled{% endif %}
+            {% if submitted and developer.username in submitted.developers %}checked{% endif %}
+          />
+          <span>
+            <strong>{{ developer.username }}</strong>
+            {% if developer.assigned_product %}
+            <em class="sub">assigned to {{ developer.assigned_product }}</em>
+            {% else %}
+            <em class="sub">available</em>
+            {% endif %}
+          </span>
+        </label>
+        {% empty %}
+        <p class="sub">No developer accounts found.</p>
+        {% endfor %}
+      </div>
+    </div>
+
+    <div class="actions">
+      <button class="primary" type="submit">Register Product</button>
+    </div>
+  </form>
+</section>
+{% endblock %}

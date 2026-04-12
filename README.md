@@ -97,11 +97,39 @@ python manage.py runserver
 
 The app will be available at `http://127.0.0.1:8000/`.
 
+## API (Sprint 2)
+
+Testing commands are provided in [testcasecommand.txt](documents/testcasecommand.txt) (using demo website 2).
+
+### 0) Register product
+
+- Method: `POST`
+- Path: `/api/products/register/`
+- Auth: required (`Session` or `Basic`)
+- Role: Product Owner only
+
+Request example:
+
+```json
+{
+  "product_id": "Prod_2",
+  "name": "BetaTrax Mobile",
+  "developers": ["dev-004"]
+}
+```
+
+Responses:
+- `201` created (returns `product_id`)
+- `400` validation failure (duplicate product, owner already has a product, invalid developer, etc.)
+- `403` non-owner account
+
 ## API (Sprint 1)
 
 Base path: `/api/defects/`
 
-Testing commands for Sprint 1 acceptance criteria are provided in [testcasecommand.txt](documents/testcasecommand.txt), [Sprint1_Demo_API.ipynb](documents/Sprint1_Demo_API.ipynb) (using demo website 2).
+Testing commands are provided in [testcasecommand.txt](documents/testcasecommand.txt) (using demo website 2).
+
+Sprint 1 acceptance criteria are provided in [Sprint1_Demo_API.ipynb](documents/Sprint1_Demo_API.ipynb) (using demo website 2).
 
 ### 1) Create defect report
 
@@ -262,21 +290,24 @@ For Google accounts, use a Google App Password (16 characters) instead of your l
 
 The following limitations are present in this Sprint 1 executable:
 
-1. Product registration and user registration are not implemented in API/UI.
-    Products and users are created through Django Admin as per course instruction.
+1. User registration is not implemented in API/UI.
+  Users are created through Django Admin as per course instruction.
 
-2. The executable is prepared for Sprint 1 with a single demo product (`Prod_1`).
+2. Product registration is available for Product Owner accounts via API and UI (`/products/register/`).
+  Sprint 1 demo data still defaults to a single seeded product (`Prod_1`).
+
+3. The executable is prepared for Sprint 1 with a single demo product (`Prod_1`).
     Multi-product support exists in data model, but full multi-product admin workflows are not part of Sprint 1 scope.
 
-3. Email notifications:
+4. Email notifications:
     - When `EMAIL_ENABLED=True`, notifications are sent via SMTP.
     - When `EMAIL_ENABLED=False`, emails are printed to console for demo/testing.
     - Real mailbox delivery depends on external SMTP configuration.
 
-4. Authentication/authorization is role-based using pre-created demo accounts.
+5. Authentication/authorization is role-based using pre-created demo accounts.
     No self-service signup/password reset is provided (Only available through admin console).
 
-5. UI is a Sprint 1 MVP and does not cover all future lifecycle paths from full use-case set.
+6. UI is a Sprint 1 MVP and does not cover all future lifecycle paths from full use-case set.
 
 ## License
 

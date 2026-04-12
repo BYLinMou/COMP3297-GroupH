@@ -97,11 +97,9 @@ python manage.py runserver
 
 The app will be available at `http://127.0.0.1:8000/`.
 
-## API (Sprint 1)
+## API (Sprint 2)
 
-Base path: `/api/defects/`
-
-Testing commands for Sprint 1 acceptance criteria are provided in [testcasecommand.txt](documents/testcasecommand.txt), [Sprint1_Demo_API.ipynb](documents/Sprint1_Demo_API.ipynb) (using demo website 2).
+Testing commands are provided in [testcasecommand.txt](documents/testcasecommand.txt) (using demo website 2).
 
 ### 0) Register product
 
@@ -124,6 +122,14 @@ Responses:
 - `201` created (returns `product_id`)
 - `400` validation failure (duplicate product, owner already has a product, invalid developer, etc.)
 - `403` non-owner account
+
+## API (Sprint 1)
+
+Base path: `/api/defects/`
+
+Testing commands are provided in [testcasecommand.txt](documents/testcasecommand.txt) (using demo website 2).
+
+Sprint 1 acceptance criteria are provided in [Sprint1_Demo_API.ipynb](documents/Sprint1_Demo_API.ipynb) (using demo website 2).
 
 ### 1) Create defect report
 

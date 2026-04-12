@@ -13,6 +13,23 @@
 # Team dev:      dev-004   / Pass1234!
 # Non-team/role checks depend on your deployed data; if unavailable, skip negative role test.
 
+# =========================
+# 0.5) POST /api/products/register/ (Sprint 2)
+# =========================
+# Replace owner/dev usernames as needed for your deployed data.
+
+# 0.5.1 Success: Product Owner registers a product
+curl -i -u owner-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/products/register/" -H "Content-Type: application/json" -d "{\"product_id\":\"Prod_2\",\"name\":\"BetaTrax Mobile\",\"developers\":[\"dev-004\"]}"
+
+# 0.5.2 Not logged in / no auth -> 403
+curl -i -X POST "https://betatrax.yeelam.site/api/products/register/" -H "Content-Type: application/json" -d "{\"product_id\":\"Prod_2\",\"name\":\"BetaTrax Mobile\",\"developers\":[\"dev-004\"]}"
+
+# 0.5.3 Developer account cannot register -> 403
+curl -i -u dev-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/products/register/" -H "Content-Type: application/json" -d "{\"product_id\":\"Prod_2\",\"name\":\"BetaTrax Mobile\",\"developers\":[]}"
+
+# 0.5.4 Duplicate product id / owner already assigned -> 400
+curl -i -u owner-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/products/register/" -H "Content-Type: application/json" -d "{\"product_id\":\"Prod_1\",\"name\":\"Duplicate Product\",\"developers\":[]}"
+
 
 # =========================
 # 1) POST /api/defects/new/ (Create defect)

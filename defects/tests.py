@@ -249,7 +249,7 @@ class DefectApiTests(TestCase):
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 400)
-        self.assertIn("已经注册过一个产品", response.json()["error"])
+        self.assertIn("already registered a product", response.json()["error"])
 
     def test_developer_cannot_register_product(self):
         self.client.force_login(self.dev_user)

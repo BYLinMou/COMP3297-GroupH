@@ -106,8 +106,7 @@ Testing commands for Sprint 1 acceptance criteria are provided in [testcasecomma
 ### 0) Register product
 
 - Method: `POST`
-- Path: `/api/products/register/` (recommended)
-- Alternate Path: `/api/defects/products/register/`
+- Path: `/api/products/register/`
 - Auth: required (`Session` or `Basic`)
 - Role: Product Owner only
 

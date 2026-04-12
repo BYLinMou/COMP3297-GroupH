@@ -366,24 +366,24 @@ def register_product(owner_user, product_id, product_name, developer_ids):
     product_name = (product_name or "").strip()
 
     if not owner_id:
-        raise ValidationError("无效的产品负责人账号。")
+        raise ValidationError("Invalid product owner account.")
     if not product_id:
-        raise ValidationError("product_id 不能为空。")
+        raise ValidationError("product_id cannot be empty.")
     if not product_name:
-        raise ValidationError("name 不能为空。")
+        raise ValidationError("name cannot be empty.")
 
     # Rule 1: one owner can register at most one product in this flow.
     if Product.objects.filter(owner_id=owner_id).exists():
-        raise ValidationError("您已经注册过一个产品，无法注册更多。")
+        raise ValidationError("You have already registered a product and cannot register another.")
 
     # Rule 2: Product ID must be unique.
     if Product.objects.filter(product_id=product_id).exists():
-        raise ValidationError("该 Product ID 已被其他产品使用。")
+        raise ValidationError("This Product ID is already in use by another product.")
 
     if developer_ids is None:
         developer_ids = []
     if not isinstance(developer_ids, list):
-        raise ValidationError("developers 必须是数组。")
+        raise ValidationError("developers must be an array.")
     developer_ids = list(dict.fromkeys(developer_ids))
 
     # Rule 3: developers must exist, be in developer group, and unassigned.
@@ -392,14 +392,14 @@ def register_product(owner_user, product_id, product_name, developer_ids):
     for raw_dev_id in developer_ids:
         developer_id = str(raw_dev_id).strip()
         if not developer_id:
-            raise ValidationError("开发者ID不能为空。")
+            raise ValidationError("Developer ID cannot be empty.")
 
         dev = user_model.objects.filter(username=developer_id).first()
         if not dev or not dev.groups.filter(name=ROLE_DEVELOPER).exists():
-            raise ValidationError(f"找不到开发者账号 {developer_id}。")
+            raise ValidationError(f"Developer account {developer_id} was not found.")
 
         if ProductDeveloper.objects.filter(developer_id=developer_id).exists():
-            raise ValidationError(f"开发者 {developer_id} 已经被分配给其他产品。")
+            raise ValidationError(f"Developer {developer_id} is already assigned to another product.")
 
         developers_to_assign.append(developer_id)
 

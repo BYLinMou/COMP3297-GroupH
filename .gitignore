@@ -1,6 +1,9 @@
 # Python bytecode
 __pycache__/
 *.py[cod]
+*.tmp
+tmp/
+temp/
 
 # Virtual environments
 .venv/
@@ -27,6 +30,10 @@ staticfiles/
 # OS files
 .DS_Store
 Thumbs.db
+
+# Test and coverage outputs
+.coverage
+htmlcov/
 
 # UI Storyboard ref
 storyboard_ref/

@@ -113,7 +113,7 @@ class DefectListApi(APIView):
 
         if actor.is_owner:
             queryset = queryset.filter(product__owner_id=actor.actor_id)
-        elif actor.is_developer:
+        else:
             queryset = queryset.filter(product__developers__developer_id=actor.actor_id).distinct()
 
         return Response({"items": [serialize_defect_for_api(defect) for defect in queryset]})
@@ -134,7 +134,7 @@ class DefectDetailApi(APIView):
         if actor.is_owner:
             if defect.product.owner_id != actor.actor_id:
                 return Response({"error": "Defect not found."}, status=status.HTTP_404_NOT_FOUND)
-        elif actor.is_developer:
+        else:
             if defect.status == "New":
                 return Response({"error": "Developer cannot access New defects."}, status=status.HTTP_403_FORBIDDEN)
             if not defect.product.developers.filter(developer_id=actor.actor_id).exists():

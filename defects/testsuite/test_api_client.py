@@ -87,6 +87,26 @@ class DefectApiClientTests(DefectApiTestCase):
         self.assertEqual(developer_scope_response.status_code, 403)
         self.assertIn("developer_id must match", developer_scope_response.json()["error"])
 
+    def test_list_allows_matching_owner_and_developer_scope_filters(self):
+        self.seed_defect.status = DefectStatus.OPEN
+        self.seed_defect.save(update_fields=["status"])
+
+        owner_response = self.api_get(
+            self.list_url,
+            user=self.owner_user,
+            params={"owner_id": self.owner_user.username},
+        )
+        self.assertEqual(owner_response.status_code, 200)
+        self.assertEqual(len(owner_response.json()["items"]), 1)
+
+        developer_response = self.api_get(
+            self.list_url,
+            user=self.dev_user,
+            params={"developer_id": self.dev_user.username},
+        )
+        self.assertEqual(developer_response.status_code, 200)
+        self.assertEqual(len(developer_response.json()["items"]), 1)
+
     def test_owner_can_filter_list_by_product(self):
         other_owner = self.create_user("owner-002", "owner002@example.com", self.owner_group)
         other_product = Product.objects.create(product_id="Prod_2", name="Other", owner_id=other_owner.username)
@@ -146,6 +166,13 @@ class DefectApiClientTests(DefectApiTestCase):
         self.seed_defect.save(update_fields=["status"])
         response = self.api_get(self.detail_url(self.seed_defect.report_id), user=outsider)
         self.assertEqual(response.status_code, 404)
+
+    def test_developer_can_get_open_defect_detail_for_assigned_product(self):
+        self.seed_defect.status = DefectStatus.OPEN
+        self.seed_defect.save(update_fields=["status"])
+        response = self.api_get(self.detail_url(self.seed_defect.report_id), user=self.dev_user)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["report_id"], self.seed_defect.report_id)
 
     def test_developer_cannot_list_new(self):
         response = self.api_get(self.list_url, user=self.dev_user, params={"status": "New"})

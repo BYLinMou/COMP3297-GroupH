@@ -38,6 +38,15 @@ jobs:
       - name: Check missing migrations
         run: python manage.py makemigrations --check --dry-run
 
+      - name: Run unit and frontend tests
+        run: python manage.py test defects.testsuite.test_services frontend.tests --verbosity 2
+
+      - name: Run API endpoint tests with APIClient
+        run: python manage.py test defects.testsuite.test_api_client --verbosity 2
+
+      - name: Run direct view tests with APIRequestFactory
+        run: python manage.py test defects.testsuite.test_views_request_factory --verbosity 2
+
       - name: Run discovered test suite
         run: python manage.py test --verbosity 2
 

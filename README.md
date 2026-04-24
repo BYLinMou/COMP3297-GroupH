@@ -20,7 +20,15 @@ This repository currently uses three GitHub Actions workflows:
 Runs on every push and pull request to validate functionality with:
 - `python manage.py check`
 - `python manage.py makemigrations --check --dry-run`
-- `python manage.py test`
+- `python manage.py test --verbosity 2`
+- `python manage.py test defects.tests --verbosity 2`
+- `python -m coverage run --branch manage.py test`
+- `python -m coverage report`
+- `python -m coverage xml -o coverage.xml`
+- `python -m coverage html`
+
+The CI workflow uploads `coverage.xml` and `htmlcov/` as a `coverage-report` artifact.
+This is the current Sprint 3 automated testing baseline.
 
 2. **Auto Release** (`.github/workflows/auto-release.yml`)
 Creates a GitHub Release after CI succeeds on `main`.
@@ -96,6 +104,54 @@ python manage.py runserver
 ```
 
 The app will be available at `http://127.0.0.1:8000/`.
+
+## Automated Testing
+
+Sprint 3 testing now uses Django's built-in test runner, Django REST Framework test utilities, and `coverage.py`.
+
+### Test layout
+
+- `defects/tests.py`
+  Compatibility entrypoint for CI jobs or local commands that explicitly run `python manage.py test defects.tests`
+- `defects/testsuite/test_api_client.py`
+  Endpoint-level integration tests using `APITestCase` and DRF's `APIClient`
+- `defects/testsuite/test_views_request_factory.py`
+  Direct view tests using `APIRequestFactory`
+- `defects/testsuite/test_services.py`
+  Service-layer tests for status transition and registration logic
+- `frontend/tests.py`
+  Smoke tests for key HTML flows
+
+### Local commands
+
+Run the full discovered suite:
+
+```bash
+python manage.py test --verbosity 2
+```
+
+Run the compatibility entrypoint explicitly:
+
+```bash
+python manage.py test defects.tests --verbosity 2
+```
+
+Run branch coverage and generate reports:
+
+```bash
+python -m coverage run --branch manage.py test
+python -m coverage report
+python -m coverage xml -o coverage.xml
+python -m coverage html
+```
+
+Coverage configuration is stored in `.coveragerc`.
+Generated artifacts are:
+
+- `coverage.xml`
+- `htmlcov/index.html`
+
+For implementation details and conventions, see [documents/automated-testing.md](documents/automated-testing.md).
 
 ## API (Sprint 2)
 

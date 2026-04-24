@@ -4,14 +4,14 @@ This project now uses Django's built-in test runner together with Django REST Fr
 
 ## Test layers
 
-- `defects/tests/test_api_client.py`: endpoint-level integration tests using `APITestCase` and `APIClient`
-- `defects/tests/test_views_request_factory.py`: direct view tests using `APIRequestFactory`
-- `defects/tests/test_services.py`: unit-style service tests for transition logic and product registration rules
+- `defects/testsuite/test_api_client.py`: endpoint-level integration tests using `APITestCase` and `APIClient`
+- `defects/testsuite/test_views_request_factory.py`: direct view tests using `APIRequestFactory`
+- `defects/testsuite/test_services.py`: unit-style service tests for transition logic and product registration rules
 - `frontend/tests.py`: smoke tests for key HTML flows
 
 ## Shared fixtures
 
-`defects/tests/base.py` provides reusable setup for:
+`defects/testsuite/base.py` provides reusable setup for:
 
 - owner and developer accounts
 - a seeded product and developer assignment
@@ -44,4 +44,4 @@ The HTML report is generated at `htmlcov/index.html`.
 - Add at least one representative endpoint test for every new API action
 - Add focused service-level tests for branch-heavy logic
 - Prefer `APITestCase` for endpoint flows and `APIRequestFactory` for direct view assertions
-- Keep reusable fixtures in `defects/tests/base.py`
+- Keep reusable fixtures in `defects/testsuite/base.py`

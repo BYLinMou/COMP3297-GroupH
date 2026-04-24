@@ -38,5 +38,27 @@ jobs:
       - name: Check missing migrations
         run: python manage.py makemigrations --check --dry-run
 
-      - name: Run tests
+      - name: Run discovered test suite
         run: python manage.py test --verbosity 2
+
+      - name: Verify defects.tests compatibility entrypoint
+        run: python manage.py test defects.tests --verbosity 2
+
+      - name: Run branch coverage
+        run: python -m coverage run --branch manage.py test
+
+      - name: Print coverage summary
+        run: python -m coverage report
+
+      - name: Export coverage artifacts
+        run: |
+          python -m coverage xml -o coverage.xml
+          python -m coverage html
+
+      - name: Upload coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report
+          path: |
+            coverage.xml
+            htmlcov/

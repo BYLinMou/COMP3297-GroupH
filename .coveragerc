@@ -5,6 +5,8 @@ source =
     frontend
 omit =
     */migrations/*
+    */tests.py
+    */testsuite/*
     manage.py
     */asgi.py
     */wsgi.py

@@ -33,6 +33,7 @@ Thumbs.db
 
 # Test and coverage outputs
 .coverage
+coverage.xml
 htmlcov/
 
 # UI Storyboard ref

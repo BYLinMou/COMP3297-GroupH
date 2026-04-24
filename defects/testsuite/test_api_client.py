@@ -4,6 +4,22 @@ from .base import DefectApiTestCase
 
 
 class DefectApiClientTests(DefectApiTestCase):
+    def test_submit_defect_invalid_email_returns_serializer_error(self):
+        response = self.api_post(
+            self.create_url,
+            {
+                "product_id": self.product.product_id,
+                "version": "v1",
+                "title": "Bad email",
+                "description": "desc",
+                "steps": "steps",
+                "tester_id": "tester-001",
+                "email": "not-an-email",
+            },
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("email", response.json()["error"])
+
     def test_submit_defect_missing_required_fields_returns_400(self):
         response = self.api_post(self.create_url, {"product_id": self.product.product_id})
         self.assertEqual(response.status_code, 400)
@@ -48,6 +64,50 @@ class DefectApiClientTests(DefectApiTestCase):
         items = response.json()["items"]
         self.assertTrue(any(item["status"] == DefectStatus.OPEN for item in items))
 
+    def test_list_rejects_authenticated_user_without_role(self):
+        outsider = self.create_user("viewer-001", "viewer@example.com")
+        response = self.api_get(self.list_url, user=outsider)
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("Only Product Owner or Developer", response.json()["error"])
+
+    def test_list_enforces_owner_and_developer_query_scope(self):
+        owner_scope_response = self.api_get(
+            self.list_url,
+            user=self.owner_user,
+            params={"owner_id": "owner-999"},
+        )
+        self.assertEqual(owner_scope_response.status_code, 403)
+        self.assertIn("owner_id must match", owner_scope_response.json()["error"])
+
+        developer_scope_response = self.api_get(
+            self.list_url,
+            user=self.dev_user,
+            params={"developer_id": "dev-999"},
+        )
+        self.assertEqual(developer_scope_response.status_code, 403)
+        self.assertIn("developer_id must match", developer_scope_response.json()["error"])
+
+    def test_owner_can_filter_list_by_product(self):
+        other_owner = self.create_user("owner-002", "owner002@example.com", self.owner_group)
+        other_product = Product.objects.create(product_id="Prod_2", name="Other", owner_id=other_owner.username)
+        DefectReport.objects.create(
+            report_id="BT-RP-2000",
+            product=other_product,
+            version="1.0.0",
+            title="Other owner defect",
+            description="desc",
+            steps="steps",
+            tester_id="tester-z",
+            status=DefectStatus.NEW,
+        )
+        response = self.api_get(
+            self.list_url,
+            user=self.owner_user,
+            params={"product_id": self.product.product_id},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(response.json()["items"]), 1)
+
     def test_owner_can_get_defect_detail(self):
         response = self.api_get(self.detail_url(self.seed_defect.report_id), user=self.owner_user)
         self.assertEqual(response.status_code, 200)
@@ -60,6 +120,32 @@ class DefectApiClientTests(DefectApiTestCase):
         response = self.api_get(self.detail_url(self.seed_defect.report_id), user=self.dev_user)
         self.assertEqual(response.status_code, 403)
         self.assertIn("cannot access New", response.json()["error"])
+
+    def test_detail_returns_404_for_unknown_or_out_of_scope_defect(self):
+        not_found = self.api_get(self.detail_url("BT-RP-9999"), user=self.owner_user)
+        self.assertEqual(not_found.status_code, 404)
+
+        other_owner = self.create_user("owner-003", "owner003@example.com", self.owner_group)
+        other_product = Product.objects.create(product_id="Prod_3", name="Third", owner_id=other_owner.username)
+        other_defect = DefectReport.objects.create(
+            report_id="BT-RP-3000",
+            product=other_product,
+            version="1.0.0",
+            title="Scoped defect",
+            description="desc",
+            steps="steps",
+            tester_id="tester-y",
+            status=DefectStatus.OPEN,
+        )
+        out_of_scope = self.api_get(self.detail_url(other_defect.report_id), user=self.owner_user)
+        self.assertEqual(out_of_scope.status_code, 404)
+
+    def test_developer_without_team_membership_cannot_get_detail(self):
+        outsider = self.create_user("dev-404", "dev404@example.com", self.developer_group)
+        self.seed_defect.status = DefectStatus.OPEN
+        self.seed_defect.save(update_fields=["status"])
+        response = self.api_get(self.detail_url(self.seed_defect.report_id), user=outsider)
+        self.assertEqual(response.status_code, 404)
 
     def test_developer_cannot_list_new(self):
         response = self.api_get(self.list_url, user=self.dev_user, params={"status": "New"})
@@ -133,6 +219,16 @@ class DefectApiClientTests(DefectApiTestCase):
             user=self.dev_user,
         )
         self.assertEqual(response.status_code, 403)
+
+    def test_register_product_returns_validation_error_detail(self):
+        owner = self.create_user("owner-004", "owner004@example.com", self.owner_group)
+        response = self.api_post(
+            self.register_url,
+            {"product_id": "Prod_5", "name": "Invalid Developers", "developers": "dev-001"},
+            user=owner,
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("developers must be an array", response.json()["error"])
 
     def test_owner_can_reject_new_defect(self):
         create_response, defect_id = self.create_defect(title="reject-flow", tester_id="tester-r")
@@ -215,3 +311,19 @@ class DefectApiClientTests(DefectApiTestCase):
         )
         self.assertEqual(bad_response.status_code, 400)
         self.assertIn("Comment text is required", bad_response.json()["error"])
+
+    def test_action_returns_404_and_serializer_errors(self):
+        missing_defect = self.api_post(
+            self.action_url("BT-RP-9999"),
+            {"action": "reject"},
+            user=self.owner_user,
+        )
+        self.assertEqual(missing_defect.status_code, 404)
+
+        missing_action = self.api_post(
+            self.action_url(self.seed_defect.report_id),
+            {"comment": "missing action"},
+            user=self.owner_user,
+        )
+        self.assertEqual(missing_action.status_code, 400)
+        self.assertIn("action", missing_action.json()["error"])

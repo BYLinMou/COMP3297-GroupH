@@ -1,14 +1,28 @@
+from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core import mail
 from django.core.exceptions import ValidationError
 from django.test import TestCase
+from unittest.mock import patch
 
-from defects.authz import ActorContext
+from defects.authz import ActorContext, ROLE_DEVELOPER, ROLE_OWNER, actor_from_user
 from defects.models import DefectComment, DefectReport, DefectStatus, Product, ProductDeveloper
-from defects.services import apply_action, create_defect, next_report_id, register_product
+from defects.services import (
+    _demo_dt,
+    _record_status_change,
+    apply_action,
+    create_defect,
+    ensure_demo_seed,
+    next_report_id,
+    register_product,
+)
 
 
 class DefectServiceTests(TestCase):
     def setUp(self):
+        self.owner_group, _ = Group.objects.get_or_create(name=ROLE_OWNER)
+        self.developer_group, _ = Group.objects.get_or_create(name=ROLE_DEVELOPER)
+        self.user_model = get_user_model()
         self.product = Product.objects.create(product_id="Prod_1", name="Demo", owner_id="owner-001")
         ProductDeveloper.objects.create(product=self.product, developer_id="dev-001")
         self.defect = DefectReport.objects.create(
@@ -24,6 +38,20 @@ class DefectServiceTests(TestCase):
         )
         self.owner_actor = ActorContext(actor_id="owner-001", is_owner=True, is_developer=False)
         self.developer_actor = ActorContext(actor_id="dev-001", is_owner=False, is_developer=True)
+        self.other_owner_actor = ActorContext(actor_id="owner-999", is_owner=True, is_developer=False)
+        self.outsider_actor = ActorContext(actor_id="outsider", is_owner=False, is_developer=False)
+
+    def create_user(self, username, email="", *groups):
+        user, created = self.user_model.objects.get_or_create(
+            username=username,
+            defaults={"email": email or f"{username}@example.com"},
+        )
+        if created:
+            user.set_password("Pass1234!")
+            user.save(update_fields=["password"])
+        for group in groups:
+            user.groups.add(group)
+        return user
 
     def test_create_defect_creates_initial_history_record(self):
         defect = create_defect(
@@ -90,3 +118,251 @@ class DefectServiceTests(TestCase):
                 product_name="Another Demo",
                 developer_ids=["dev-001"],
             )
+
+    def test_actor_from_user_handles_anonymous_and_group_membership(self):
+        anonymous = actor_from_user(None)
+        self.assertEqual(anonymous.actor_id, "")
+        self.assertFalse(anonymous.is_owner)
+        self.assertFalse(anonymous.is_developer)
+
+        owner = self.create_user("owner-002", "owner2@example.com", self.owner_group)
+        actor = actor_from_user(owner)
+        self.assertEqual(actor.actor_id, owner.username)
+        self.assertTrue(actor.is_owner)
+        self.assertFalse(actor.is_developer)
+
+    def test_model_string_representations_are_human_readable(self):
+        assignment = ProductDeveloper.objects.get(product=self.product, developer_id="dev-001")
+        self.assertEqual(str(self.product), "Prod_1")
+        self.assertEqual(str(assignment), "dev-001@Prod_1")
+        self.assertEqual(str(self.defect), "BT-RP-2401")
+
+    def test_demo_helpers_create_seed_users_and_remove_legacy_records(self):
+        legacy_product = Product.objects.create(product_id="PRD-1007", name="Legacy", owner_id="legacy-owner")
+        legacy_defect = DefectReport.objects.create(
+            report_id="BT-RP-2471",
+            product=legacy_product,
+            version="0.1.0",
+            title="Legacy defect",
+            description="desc",
+            steps="steps",
+            tester_id="tester-old",
+            status=DefectStatus.NEW,
+        )
+        DefectComment.objects.create(defect=legacy_defect, author_id="owner", text="legacy")
+
+        ensure_demo_seed()
+
+        self.assertTrue(self.user_model.objects.filter(username="owner-001", groups__name=ROLE_OWNER).exists())
+        self.assertTrue(self.user_model.objects.filter(username="dev-001", groups__name=ROLE_DEVELOPER).exists())
+        self.assertTrue(self.user_model.objects.filter(username="dev-004", groups__name=ROLE_DEVELOPER).exists())
+        self.assertFalse(Product.objects.filter(product_id="PRD-1007").exists())
+        self.assertFalse(DefectReport.objects.filter(report_id="BT-RP-2471").exists())
+
+    def test_demo_helpers_remove_stale_reports_not_linked_to_legacy_product(self):
+        stale_defect = DefectReport.objects.create(
+            report_id="BT-RP-2476",
+            product=self.product,
+            version="0.1.1",
+            title="Stale defect",
+            description="desc",
+            steps="steps",
+            tester_id="tester-stale",
+            status=DefectStatus.NEW,
+        )
+        DefectComment.objects.create(defect=stale_defect, author_id="owner", text="stale")
+
+        ensure_demo_seed()
+
+        self.assertFalse(DefectReport.objects.filter(report_id="BT-RP-2476").exists())
+
+    def test_demo_dt_supports_iso_strings_with_or_without_timezone(self):
+        aware = _demo_dt("2026-04-24T12:30:00+08:00")
+        self.assertIsNotNone(aware.tzinfo)
+        with patch("defects.services.parse_datetime", return_value=None):
+            fallback = _demo_dt("2026-04-24T12:30:00")
+        self.assertIsNotNone(fallback.tzinfo)
+
+    def test_record_status_change_skips_same_status_transition(self):
+        baseline = self.defect.history.count()
+        _record_status_change(self.defect, DefectStatus.NEW, DefectStatus.NEW, "owner-001")
+        self.assertEqual(self.defect.history.count(), baseline)
+
+    def test_accept_open_validates_permissions_and_inputs(self):
+        invalid_cases = [
+            (self.developer_actor, {"severity": "High", "priority": "P1"}, "Only Product Owner role can accept"),
+            (self.other_owner_actor, {"severity": "High", "priority": "P1"}, "Only the Product Owner can accept"),
+            (self.owner_actor, {"severity": "Critical", "priority": "P1"}, "Severity must be High"),
+            (self.owner_actor, {"severity": "High", "priority": "P9"}, "Priority must be P1"),
+        ]
+        for actor, payload, message in invalid_cases:
+            with self.subTest(actor=actor, payload=payload):
+                with self.assertRaisesMessage(ValueError, message):
+                    apply_action(self.defect, "accept_open", payload, actor)
+
+        self.defect.status = DefectStatus.OPEN
+        with self.assertRaisesMessage(ValueError, "Only New defects can be accepted."):
+            apply_action(self.defect, "accept_open", {"severity": "High", "priority": "P1"}, self.owner_actor)
+
+    def test_reject_duplicate_and_comment_guard_rails(self):
+        reject_defect = self.defect
+        reject_defect.status = DefectStatus.OPEN
+        with self.assertRaisesMessage(ValueError, "Only New defects can be rejected."):
+            apply_action(reject_defect, "reject", {}, self.owner_actor)
+
+        fresh_reject = DefectReport.objects.create(
+            report_id="BT-RP-2409",
+            product=self.product,
+            version="1.0.9",
+            title="Reject permissions",
+            description="desc",
+            steps="steps",
+            tester_id="tester-009",
+            status=DefectStatus.NEW,
+        )
+        with self.assertRaisesMessage(ValueError, "Only Product Owner role can reject this defect."):
+            apply_action(fresh_reject, "reject", {}, self.developer_actor)
+        with self.assertRaisesMessage(ValueError, "Only the Product Owner can reject this defect."):
+            apply_action(fresh_reject, "reject", {}, self.other_owner_actor)
+
+        duplicate_defect = DefectReport.objects.create(
+            report_id="BT-RP-2402",
+            product=self.product,
+            version="1.0.1",
+            title="Duplicate branch",
+            description="desc",
+            steps="steps",
+            tester_id="tester-002",
+            status=DefectStatus.NEW,
+        )
+        message = apply_action(
+            duplicate_defect,
+            "duplicate",
+            {"duplicate_of": duplicate_defect.report_id},
+            self.owner_actor,
+        )
+        duplicate_defect.refresh_from_db()
+        self.assertEqual(message, "Defect moved to Duplicate.")
+        self.assertIsNone(duplicate_defect.duplicate_of)
+
+        duplicate_role_check = DefectReport.objects.create(
+            report_id="BT-RP-2403",
+            product=self.product,
+            version="1.0.2",
+            title="Duplicate permissions",
+            description="desc",
+            steps="steps",
+            tester_id="tester-003",
+            status=DefectStatus.NEW,
+        )
+        with self.assertRaisesMessage(ValueError, "Only Product Owner role can mark duplicate."):
+            apply_action(duplicate_role_check, "duplicate", {}, self.developer_actor)
+        with self.assertRaisesMessage(ValueError, "Only the Product Owner can mark duplicate."):
+            apply_action(duplicate_role_check, "duplicate", {}, self.other_owner_actor)
+
+        duplicate_status_check = DefectReport.objects.create(
+            report_id="BT-RP-2404",
+            product=self.product,
+            version="1.0.3",
+            title="Duplicate status",
+            description="desc",
+            steps="steps",
+            tester_id="tester-004",
+            status=DefectStatus.OPEN,
+        )
+        with self.assertRaisesMessage(ValueError, "Only New defects can be marked duplicate."):
+            apply_action(duplicate_status_check, "duplicate", {}, self.owner_actor)
+        with self.assertRaisesMessage(ValueError, "Only Product Owner or Developer may add comments."):
+            apply_action(self.defect, "add_comment", {"comment": "blocked"}, self.outsider_actor)
+
+    def test_take_fix_cannot_reproduce_resolve_and_reopen_guard_rails(self):
+        with self.assertRaisesMessage(ValueError, "Only Open/Reopened defects can be assigned."):
+            apply_action(self.defect, "take_ownership", {}, self.developer_actor)
+
+        self.defect.status = DefectStatus.OPEN
+        with self.assertRaisesMessage(ValueError, "Only Developer role can take ownership."):
+            apply_action(self.defect, "take_ownership", {}, self.owner_actor)
+
+        self.defect.status = DefectStatus.ASSIGNED
+        self.defect.assignee_id = "dev-001"
+
+        with self.assertRaisesMessage(ValueError, "Only the assigned developer may mark this defect Fixed."):
+            apply_action(
+                self.defect,
+                "set_fixed",
+                {"fix_note": "done"},
+                ActorContext(actor_id="dev-002", is_owner=False, is_developer=True),
+            )
+        with self.assertRaisesMessage(ValueError, "Only Developer role can set defect to Fixed."):
+            apply_action(self.defect, "set_fixed", {"fix_note": "done"}, self.owner_actor)
+
+        self.defect.status = DefectStatus.OPEN
+        with self.assertRaisesMessage(ValueError, "Only Assigned defects can be marked Cannot Reproduce."):
+            apply_action(self.defect, "cannot_reproduce", {"fix_note": "no repro"}, self.developer_actor)
+
+        self.defect.status = DefectStatus.ASSIGNED
+        self.defect.assignee_id = "dev-001"
+        with self.assertRaisesMessage(ValueError, "Only Developer role can mark Cannot Reproduce."):
+            apply_action(self.defect, "cannot_reproduce", {"fix_note": "no repro"}, self.owner_actor)
+        with self.assertRaisesMessage(ValueError, "Only the assigned developer may mark this defect Cannot Reproduce."):
+            apply_action(
+                self.defect,
+                "cannot_reproduce",
+                {"fix_note": "no repro"},
+                ActorContext(actor_id="dev-002", is_owner=False, is_developer=True),
+            )
+
+        self.defect.status = DefectStatus.OPEN
+        with self.assertRaisesMessage(ValueError, "Only Fixed defects can be resolved."):
+            apply_action(self.defect, "set_resolved", {"retest_note": "ok"}, self.owner_actor)
+
+        self.defect.status = DefectStatus.FIXED
+        with self.assertRaisesMessage(ValueError, "Only Product Owner role can resolve this defect."):
+            apply_action(self.defect, "set_resolved", {"retest_note": "ok"}, self.developer_actor)
+        with self.assertRaisesMessage(ValueError, "Only the Product Owner can resolve this defect."):
+            apply_action(self.defect, "set_resolved", {"retest_note": "ok"}, self.other_owner_actor)
+
+        self.defect.status = DefectStatus.OPEN
+        with self.assertRaisesMessage(ValueError, "Only Fixed defects can be reopened."):
+            apply_action(self.defect, "reopen", {"retest_note": "still broken"}, self.owner_actor)
+
+        self.defect.status = DefectStatus.FIXED
+        with self.assertRaisesMessage(ValueError, "Only Product Owner role can reopen this defect."):
+            apply_action(self.defect, "reopen", {"retest_note": "still broken"}, self.developer_actor)
+        with self.assertRaisesMessage(ValueError, "Only the Product Owner can reopen this defect."):
+            apply_action(self.defect, "reopen", {"retest_note": "still broken"}, self.other_owner_actor)
+
+    def test_unknown_action_and_register_product_validation_paths(self):
+        with self.assertRaisesMessage(ValueError, "Unknown action."):
+            apply_action(self.defect, "unsupported", {}, self.owner_actor)
+
+        dev = self.create_user("dev-002", "dev2@example.com", self.developer_group)
+        owner_user = type("OwnerUser", (), {"username": "owner-010"})()
+
+        invalid_product_cases = [
+            (type("OwnerUser", (), {"username": ""})(), "Prod_10", "Demo", [], "Invalid product owner account."),
+            (owner_user, "", "Demo", [], "product_id cannot be empty."),
+            (owner_user, "Prod_10", "", [], "name cannot be empty."),
+            (owner_user, "Prod_10", "Demo", "dev-002", "developers must be an array."),
+            (owner_user, "Prod_10", "Demo", ["   "], "Developer ID cannot be empty."),
+            (owner_user, "Prod_10", "Demo", ["missing-dev"], "Developer account missing-dev was not found."),
+        ]
+        for current_owner, product_id, product_name, developer_ids, message in invalid_product_cases:
+            with self.subTest(message=message):
+                with self.assertRaisesMessage(ValidationError, message):
+                    register_product(current_owner, product_id, product_name, developer_ids)
+
+        product = register_product(owner_user, "Prod_10", "Demo", None)
+        self.assertEqual(product.product_id, "Prod_10")
+        self.assertFalse(ProductDeveloper.objects.filter(product=product).exists())
+
+        with self.assertRaisesMessage(ValidationError, "This Product ID is already in use by another product."):
+            register_product(type("OwnerUser", (), {"username": "owner-012"})(), "Prod_10", "Dupe", [])
+
+        product_with_dedupe = register_product(
+            type("OwnerUser", (), {"username": "owner-011"})(),
+            "Prod_11",
+            "Demo Two",
+            [dev.username, dev.username],
+        )
+        self.assertEqual(ProductDeveloper.objects.filter(product=product_with_dedupe).count(), 1)

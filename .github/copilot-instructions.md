@@ -1,8 +1,10 @@
-Commit after each core function done. Update the VERSION file as well for version control (jump number only when one core function done, or else change the alpha number, e.g. 0.0.0-alpha.1, 0.0.0-alpha.2)
+Continuosly define automation testing and test cases after each feature done.
+
+After implementing code changes, update the documents (documents/*, README.md) tp describe new features usages if applicable. 
 
 Track the .gitignore file and add all tmp files into it.
 
-Continuosly define automation testing and test cases after each feature done.
+Commit after each core function done. Update the VERSION file as well for version control (jump number only when one core function done, or else change the alpha number, e.g. 0.0.0-alpha.1, 0.0.0-alpha.2)
 
 ---
 

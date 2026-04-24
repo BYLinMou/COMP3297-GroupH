@@ -8,6 +8,9 @@ The GitHub Actions CI workflow in `.github/workflows/ci.yml` currently performs 
 
 - `python manage.py check`
 - `python manage.py makemigrations --check --dry-run`
+- `python manage.py test defects.testsuite.test_services frontend.tests --verbosity 2`
+- `python manage.py test defects.testsuite.test_api_client --verbosity 2`
+- `python manage.py test defects.testsuite.test_views_request_factory --verbosity 2`
 - `python manage.py test --verbosity 2`
 - `python manage.py test defects.tests --verbosity 2`
 - `python -m coverage run --branch manage.py test`
@@ -45,6 +48,24 @@ Run all tests:
 python manage.py test --verbosity 2
 ```
 
+Run unit/service and frontend tests explicitly:
+
+```powershell
+python manage.py test defects.testsuite.test_services frontend.tests --verbosity 2
+```
+
+Run endpoint tests with DRF `APIClient`:
+
+```powershell
+python manage.py test defects.testsuite.test_api_client --verbosity 2
+```
+
+Run direct view tests with DRF `APIRequestFactory`:
+
+```powershell
+python manage.py test defects.testsuite.test_views_request_factory --verbosity 2
+```
+
 Run the explicit compatibility entrypoint:
 
 ```powershell
@@ -76,3 +97,4 @@ Application code is included in coverage; migration files and test modules are i
 - Prefer `APITestCase` for endpoint flows and `APIRequestFactory` for direct view assertions
 - Keep reusable fixtures in `defects/testsuite/base.py`
 - Preserve `defects/tests.py` as a stable compatibility entrypoint when reorganizing the defect test suite
+- Use `if ... else ...` instead of a logically unreachable `elif` branch when earlier guards already guarantee only two valid actor paths, otherwise branch coverage may report a false gap

@@ -31,7 +31,7 @@ def home(request):
     queryset = DefectReport.objects.select_related("product").order_by("-report_id")
     if actor.is_owner:
         queryset = queryset.filter(product__owner_id=actor.actor_id)
-    elif actor.is_developer:
+    else:
         queryset = queryset.filter(product__developers__developer_id=actor.actor_id).distinct()
 
     if selected != "all":

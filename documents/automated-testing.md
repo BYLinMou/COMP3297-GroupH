@@ -26,6 +26,7 @@ CI uploads `coverage.xml` and `htmlcov/` as the `coverage-report` artifact.
 - `defects/testsuite/test_api_client.py`: endpoint-level integration tests using `APITestCase` and `APIClient`
 - `defects/testsuite/test_views_request_factory.py`: direct view tests using `APIRequestFactory`
 - `defects/testsuite/test_services.py`: unit-style service tests for transition logic and product registration rules
+- `defects/testsuite/test_effectiveness.py`: branch-focused tests for `classify_developer(fixed, reopened)`
 - `frontend/tests.py`: smoke tests for key HTML flows
 
 ## Shared fixtures
@@ -66,6 +67,12 @@ Run direct view tests with DRF `APIRequestFactory`:
 python manage.py test defects.testsuite.test_views_request_factory --verbosity 2
 ```
 
+Run effectiveness classification tests only:
+
+```powershell
+python manage.py test defects.testsuite.test_effectiveness --verbosity 2
+```
+
 Run the explicit compatibility entrypoint:
 
 ```powershell
@@ -79,6 +86,13 @@ python -m coverage run --branch manage.py test
 python -m coverage report
 python -m coverage xml -o coverage.xml
 python -m coverage html
+```
+
+Run focused branch+statement coverage for classification module:
+
+```powershell
+python -m coverage run --branch manage.py test defects.testsuite.test_effectiveness --verbosity 2
+python -m coverage report -m --include="defects/effectiveness.py"
 ```
 
 Generated reports:

@@ -24,6 +24,20 @@ class ProductDeveloper(models.Model):
         return f"{self.developer_id}@{self.product_id}"
 
 
+class Tenant(models.Model):
+    schema_name = models.CharField(max_length=63, unique=True)
+    domain = models.CharField(max_length=255, unique=True)
+    name = models.CharField(max_length=128, blank=True)
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ["schema_name"]
+
+    def __str__(self) -> str:
+        return f"{self.schema_name} ({self.domain})"
+
+
 class DefectStatus(models.TextChoices):
     NEW = "New", "New"
     OPEN = "Open", "Open"

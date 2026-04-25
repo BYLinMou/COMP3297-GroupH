@@ -108,6 +108,25 @@ python manage.py runserver
 
 The app will be available at `http://127.0.0.1:8000/`.
 
+### PostgreSQL + Tenant Ready Config (Sprint 3)
+
+Sprint 3 adds PostgreSQL-ready configuration and tenant registration API.
+
+Set these variables in `.env` when using PostgreSQL:
+
+- `DATABASE_ENGINE=postgresql`
+- `POSTGRES_DB=betatrax`
+- `POSTGRES_USER=postgres`
+- `POSTGRES_PASSWORD=postgres`
+- `POSTGRES_HOST=127.0.0.1`
+- `POSTGRES_PORT=5432`
+
+Optional tenant middleware wiring can be enabled with:
+
+- `ENABLE_DJANGO_TENANTS=True`
+
+By default, this flag is disabled to keep local/CI setup simple.
+
 ## Automated Testing
 
 Sprint 3 testing now uses Django's built-in test runner, Django REST Framework test utilities, and `coverage.py`.
@@ -122,6 +141,8 @@ Sprint 3 testing now uses Django's built-in test runner, Django REST Framework t
   Direct view tests using `APIRequestFactory`
 - `defects/testsuite/test_services.py`
   Service-layer tests for status transition and registration logic
+- `defects/testsuite/test_effectiveness.py`
+  Branch/statement coverage tests for developer effectiveness classification rules
 - `frontend/tests.py`
   Smoke tests for key HTML flows
 
@@ -149,6 +170,12 @@ Run direct view tests with `APIRequestFactory`:
 
 ```bash
 python manage.py test defects.testsuite.test_views_request_factory --verbosity 2
+```
+
+Run effectiveness classification tests explicitly:
+
+```bash
+python manage.py test defects.testsuite.test_effectiveness --verbosity 2
 ```
 
 Run the compatibility entrypoint explicitly:
@@ -199,6 +226,69 @@ Responses:
 - `201` created (returns `product_id`)
 - `400` validation failure (duplicate product, owner already has a product, invalid developer, etc.)
 - `403` non-owner account
+
+## API (Sprint 3)
+
+### 1) Register tenant
+
+- Method: `POST`
+- Path: `/api/tenants/register/`
+- Auth: required (`Session` or `Basic`)
+- Role: Platform Admin only (superuser or `platform_admin` group)
+
+Request example:
+
+```json
+{
+  "schema_name": "team_a",
+  "domain": "team-a.example.com",
+  "name": "Team A"
+}
+```
+
+Responses:
+- `201` created
+- `400` validation failure
+- `403` non-platform-admin account
+
+### 2) Developer effectiveness metric
+
+- Method: `GET`
+- Path: `/api/developers/{developer_id}/effectiveness/`
+- Auth: required (`Session` or `Basic`)
+- Role: Product Owner only
+
+Response example:
+
+```json
+{
+  "developer_id": "dev-001",
+  "fixed": 36,
+  "reopened": 2,
+  "reopen_ratio": 0.05555555555555555,
+  "classification": "Fair"
+}
+```
+
+Classification rules:
+- `fixed < 20` -> `Insufficient data`
+- `reopened / fixed < 1/32` -> `Good`
+- `1/32 <= reopened / fixed < 1/8` -> `Fair`
+- `reopened / fixed >= 1/8` -> `Poor`
+
+### 3) Duplicate chain email notification
+
+When the root defect of a duplicate chain changes status, the system now:
+
+- Finds all linked duplicate reports recursively
+- Sends notification emails to testers of linked duplicates (only when those reports store tester email)
+
+### 4) API documentation
+
+When `drf-spectacular` is available, generated API docs are exposed at:
+
+- OpenAPI schema: `/api/schema/`
+- Swagger UI: `/api/docs/`
 
 ## API (Sprint 1)
 

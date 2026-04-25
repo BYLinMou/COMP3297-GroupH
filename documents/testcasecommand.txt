@@ -166,3 +166,68 @@ curl -i -u owner-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/defects
 # 8.4 Email checks for transition to Resolved
 # - With tester email: expect email output containing report_id and status Resolved.
 # - Without tester email: expect no email output.
+
+
+# =========================
+# 9) Reject / Duplicate / Cannot Reproduce / Reopen / Comment (Sprint 3)
+# =========================
+
+# 9.1 Reject: Product Owner rejects a New defect
+curl -i -u owner-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/defects/BT-RP-XXXX/actions/" -H "Content-Type: application/json" -d "{\"action\":\"reject\"}"
+
+# 9.2 Duplicate: Product Owner marks a New defect as duplicate of root report
+curl -i -u owner-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/defects/BT-RP-DUP/actions/" -H "Content-Type: application/json" -d "{\"action\":\"duplicate\",\"duplicate_of\":\"BT-RP-ROOT\"}"
+
+# 9.3 Cannot reproduce: assigned developer marks assigned defect
+curl -i -u dev-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/defects/BT-RP-ASSIGNED/actions/" -H "Content-Type: application/json" -d "{\"action\":\"cannot_reproduce\",\"fix_note\":\"Cannot reproduce locally\"}"
+
+# 9.4 Reopen: Product Owner reopens a Fixed defect
+curl -i -u owner-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/defects/BT-RP-FIXED/actions/" -H "Content-Type: application/json" -d "{\"action\":\"reopen\",\"retest_note\":\"still failing\"}"
+
+# 9.5 Add comment: owner/developer adds comment
+curl -i -u owner-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/defects/BT-RP-XXXX/actions/" -H "Content-Type: application/json" -d "{\"action\":\"add_comment\",\"comment\":\"Need logs and screenshot\"}"
+
+# 9.6 Add comment negative: blank comment -> 400
+curl -i -u owner-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/defects/BT-RP-XXXX/actions/" -H "Content-Type: application/json" -d "{\"action\":\"add_comment\",\"comment\":\"   \"}"
+
+
+# =========================
+# 10) Duplicate chain notification check (Sprint 3 US-12)
+# =========================
+# 10.1 Prepare one root + one duplicate defect with tester email on duplicate.
+# 10.2 Change root status (for example, accept_open/reject/resolved).
+# 10.3 Verify tester of linked duplicate receives email notification.
+
+
+# =========================
+# 11) Tenant registration API (Sprint 3)
+# =========================
+# Requires platform admin account (superuser or platform_admin role).
+
+# 11.1 Success
+curl -i -u platform-admin:Pass1234! -X POST "https://betatrax.yeelam.site/api/tenants/register/" -H "Content-Type: application/json" -d "{\"schema_name\":\"team_a\",\"domain\":\"team-a.example.com\",\"name\":\"Team A\"}"
+
+# 11.2 Non-platform-admin -> 403
+curl -i -u owner-001:Pass1234! -X POST "https://betatrax.yeelam.site/api/tenants/register/" -H "Content-Type: application/json" -d "{\"schema_name\":\"team_b\",\"domain\":\"team-b.example.com\"}"
+
+
+# =========================
+# 12) Developer effectiveness API (Sprint 3)
+# =========================
+
+# 12.1 Product Owner queries developer effectiveness
+curl -i -u owner-001:Pass1234! "https://betatrax.yeelam.site/api/developers/dev-001/effectiveness/"
+
+# 12.2 Developer cannot query effectiveness -> 403
+curl -i -u dev-001:Pass1234! "https://betatrax.yeelam.site/api/developers/dev-001/effectiveness/"
+
+
+# =========================
+# 13) API documentation endpoints (Sprint 3)
+# =========================
+
+# 13.1 OpenAPI schema
+curl -i "https://betatrax.yeelam.site/api/schema/"
+
+# 13.2 Swagger UI page
+curl -i "https://betatrax.yeelam.site/api/docs/"

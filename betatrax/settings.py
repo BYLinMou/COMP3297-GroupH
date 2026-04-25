@@ -11,6 +11,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
+import importlib.util
 from pathlib import Path
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
@@ -32,6 +33,14 @@ def _load_dotenv(path: Path) -> None:
 _load_dotenv(BASE_DIR / ".env")
 
 
+def _env_flag(name: str, default: str = "False") -> bool:
+    return os.getenv(name, default).lower() in {"1", "true", "yes", "on"}
+
+
+HAS_DJANGO_TENANTS = importlib.util.find_spec("django_tenants") is not None
+HAS_DRF_SPECTACULAR = importlib.util.find_spec("drf_spectacular") is not None
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -40,7 +49,7 @@ SECRET_KEY = 'django-insecure-#gy1nwck5!1e@@qcey(j36qe)s5f365s!$fn3hw##3k$5wd2lh
 
 # SECURITY WARNING: don't run with debug turned on in production!
 # Default True for local development convenience; set DJANGO_DEBUG=False in production.
-DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() in {"1", "true", "yes", "on"}
+DEBUG = _env_flag("DJANGO_DEBUG", "True")
 
 def _split_csv_env(name: str) -> list[str]:
     raw = os.getenv(name, "")
@@ -71,6 +80,8 @@ USE_X_FORWARDED_HOST = True
 
 # Application definition
 
+USE_DJANGO_TENANTS = _env_flag("ENABLE_DJANGO_TENANTS", "False") and HAS_DJANGO_TENANTS
+
 INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
@@ -83,6 +94,12 @@ INSTALLED_APPS = [
     'frontend',
 ]
 
+if HAS_DRF_SPECTACULAR:
+    INSTALLED_APPS.append('drf_spectacular')
+
+if USE_DJANGO_TENANTS and 'django_tenants' not in INSTALLED_APPS:
+    INSTALLED_APPS.insert(0, 'django_tenants')
+
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
     'django.contrib.sessions.middleware.SessionMiddleware',
@@ -92,6 +109,9 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+if USE_DJANGO_TENANTS:
+    MIDDLEWARE.insert(0, 'django_tenants.middleware.main.TenantMainMiddleware')
 
 ROOT_URLCONF = 'betatrax.urls'
 
@@ -116,12 +136,31 @@ WSGI_APPLICATION = 'betatrax.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
-        'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': Path(os.getenv("SQLITE_PATH", str(BASE_DIR / 'db.sqlite3'))),
+DATABASE_ENGINE = os.getenv("DATABASE_ENGINE", "sqlite").strip().lower()
+if DATABASE_ENGINE == "postgresql":
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.getenv('POSTGRES_DB', 'betatrax'),
+            'USER': os.getenv('POSTGRES_USER', 'postgres'),
+            'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'postgres'),
+            'HOST': os.getenv('POSTGRES_HOST', '127.0.0.1'),
+            'PORT': os.getenv('POSTGRES_PORT', '5432'),
+        }
     }
-}
+else:
+    DATABASES = {
+        'default': {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': Path(os.getenv("SQLITE_PATH", str(BASE_DIR / 'db.sqlite3'))),
+        }
+    }
+
+if USE_DJANGO_TENANTS:
+    DATABASES['default']['ENGINE'] = 'django_tenants.postgresql_backend'
+    DATABASE_ROUTERS = ('django_tenants.routers.TenantSyncRouter',)
+    TENANT_MODEL = 'defects.Tenant'
+    TENANT_DOMAIN_MODEL = 'defects.Tenant'
 
 
 # Password validation
@@ -172,6 +211,14 @@ REST_FRAMEWORK = {
         "rest_framework.authentication.BasicAuthentication",
     ],
 }
+
+if HAS_DRF_SPECTACULAR:
+    REST_FRAMEWORK["DEFAULT_SCHEMA_CLASS"] = "drf_spectacular.openapi.AutoSchema"
+    SPECTACULAR_SETTINGS = {
+        "TITLE": "BetaTrax API",
+        "DESCRIPTION": "BetaTrax defect management API documentation",
+        "VERSION": "v3",
+    }
 
 
 # Email

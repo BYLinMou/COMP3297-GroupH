@@ -7,18 +7,62 @@ from .services import register_product
 from .authz import actor_from_user
 from .models import DefectReport, Product
 from django.core.exceptions import ValidationError
-from .serializers import DefectActionSerializer, DefectCreateSerializer
+from .serializers import DefectActionSerializer, DefectCreateSerializer, TenantRegisterSerializer
 from .services import (
     STATUS_BY_SLUG,
     apply_action,
     create_defect,
+    register_tenant,
     serialize_defect_detail_for_api,
     serialize_defect_for_api,
+    summarize_developer_effectiveness,
 )
+
+try:
+    from drf_spectacular.utils import OpenApiExample, OpenApiParameter, extend_schema
+except Exception:  # pragma: no cover - optional dependency fallback
+    class OpenApiExample:  # type: ignore[override]
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class OpenApiParameter:  # type: ignore[override]
+        QUERY = "query"
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+    def extend_schema(*args, **kwargs):  # type: ignore[override]
+        def _decorator(obj):
+            return obj
+
+        return _decorator
 
 class ProductRegisterApi(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="Register product",
+        description="Only Product Owners can register a product and bind developer accounts in one request.",
+        request={
+            "application/json": {
+                "type": "object",
+                "required": ["product_id", "name"],
+                "properties": {
+                    "product_id": {"type": "string"},
+                    "name": {"type": "string"},
+                    "developers": {"type": "array", "items": {"type": "string"}},
+                },
+            }
+        },
+        responses={201: {"type": "object"}, 400: {"type": "object"}, 403: {"type": "object"}},
+        examples=[
+            OpenApiExample(
+                "Register product example",
+                value={"product_id": "Prod_2", "name": "BetaTrax Mobile", "developers": ["dev-004"]},
+                request_only=True,
+            )
+        ],
+    )
     def post(self, request):
         actor = actor_from_user(request.user)
         if not actor.is_owner:
@@ -40,6 +84,12 @@ class DefectCreateApi(APIView):
     permission_classes = [AllowAny]
 
     @transaction.atomic
+    @extend_schema(
+        summary="Submit defect",
+        description="Create a new defect report from an external testing system.",
+        request=DefectCreateSerializer,
+        responses={201: {"type": "object"}, 400: {"type": "object"}, 404: {"type": "object"}},
+    )
     def post(self, request):
 
 
@@ -83,6 +133,17 @@ class DefectCreateApi(APIView):
 class DefectListApi(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="List defects",
+        description="List defects by filters. Product Owners and Developers have different visibility scopes.",
+        parameters=[
+            OpenApiParameter(name="status", location=OpenApiParameter.QUERY, required=False, type=str),
+            OpenApiParameter(name="product_id", location=OpenApiParameter.QUERY, required=False, type=str),
+            OpenApiParameter(name="owner_id", location=OpenApiParameter.QUERY, required=False, type=str),
+            OpenApiParameter(name="developer_id", location=OpenApiParameter.QUERY, required=False, type=str),
+        ],
+        responses={200: {"type": "object"}, 403: {"type": "object"}},
+    )
     def get(self, request):
         actor = actor_from_user(request.user)
         if not actor.is_owner and not actor.is_developer:
@@ -122,6 +183,11 @@ class DefectListApi(APIView):
 class DefectDetailApi(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        summary="Get defect detail",
+        description="Retrieve detailed defect information by report_id.",
+        responses={200: {"type": "object"}, 403: {"type": "object"}, 404: {"type": "object"}},
+    )
     def get(self, request, defect_id):
         defect = DefectReport.objects.select_related("product").filter(report_id=defect_id).first()
         if defect is None:
@@ -147,6 +213,15 @@ class DefectActionApi(APIView):
     permission_classes = [IsAuthenticated]
 
     @transaction.atomic
+    @extend_schema(
+        summary="Apply defect action",
+        description=(
+            "Supported actions: accept_open, reject, duplicate, take_ownership, set_fixed, "
+            "cannot_reproduce, set_resolved, reopen, add_comment."
+        ),
+        request=DefectActionSerializer,
+        responses={200: {"type": "object"}, 400: {"type": "object"}, 403: {"type": "object"}, 404: {"type": "object"}},
+    )
     def post(self, request, defect_id):
         defect = DefectReport.objects.select_related("product").filter(report_id=defect_id).first()
         if defect is None:
@@ -173,3 +248,75 @@ class DefectActionApi(APIView):
                 "status": defect.status,
             }
         )
+
+
+class TenantRegisterApi(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Register tenant",
+        description="Only platform admins can register tenants with schema_name and domain.",
+        request=TenantRegisterSerializer,
+        responses={201: {"type": "object"}, 400: {"type": "object"}, 403: {"type": "object"}},
+        examples=[
+            OpenApiExample(
+                "Register tenant example",
+                value={"schema_name": "team_a", "domain": "team-a.betatrax.local", "name": "Team A"},
+                request_only=True,
+            )
+        ],
+    )
+    def post(self, request):
+        actor = actor_from_user(request.user)
+        if not actor.is_platform_admin:
+            return Response({"error": "Only platform admins can register tenants."}, status=status.HTTP_403_FORBIDDEN)
+
+        serializer = TenantRegisterSerializer(data=request.data)
+        if not serializer.is_valid():
+            return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
+
+        payload = serializer.validated_data
+        try:
+            tenant = register_tenant(
+                schema_name=payload.get("schema_name", ""),
+                domain=payload.get("domain", ""),
+                name=payload.get("name", ""),
+            )
+        except ValidationError as exc:
+            detail = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+            return Response({"error": detail}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(
+            {
+                "message": "Tenant registered successfully.",
+                "tenant": {
+                    "schema_name": tenant.schema_name,
+                    "domain": tenant.domain,
+                    "name": tenant.name,
+                    "is_active": tenant.is_active,
+                },
+            },
+            status=status.HTTP_201_CREATED,
+        )
+
+
+class DeveloperEffectivenessApi(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        summary="Developer effectiveness",
+        description="Only Product Owners can query effectiveness classification for developers in their teams.",
+        responses={200: {"type": "object"}, 400: {"type": "object"}, 403: {"type": "object"}},
+    )
+    def get(self, request, developer_id):
+        actor = actor_from_user(request.user)
+        if not actor.is_owner:
+            return Response({"error": "Only product owners can view developer effectiveness."}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            result = summarize_developer_effectiveness(actor.actor_id, developer_id)
+        except ValidationError as exc:
+            detail = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+            return Response({"error": detail}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(result, status=status.HTTP_200_OK)

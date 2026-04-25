@@ -354,3 +354,64 @@ class DefectApiClientTests(DefectApiTestCase):
         )
         self.assertEqual(missing_action.status_code, 400)
         self.assertIn("action", missing_action.json()["error"])
+
+    def test_platform_admin_can_register_tenant(self):
+        admin_user = self.create_user("platform-admin", "platform-admin@example.com")
+        admin_user.is_superuser = True
+        admin_user.is_staff = True
+        admin_user.save(update_fields=["is_superuser", "is_staff"])
+
+        response = self.api_post(
+            self.tenant_register_url,
+            {
+                "schema_name": "team_blue",
+                "domain": "team-blue.example.com",
+                "name": "Team Blue",
+            },
+            user=admin_user,
+        )
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.json()["tenant"]["schema_name"], "team_blue")
+
+    def test_non_platform_admin_cannot_register_tenant(self):
+        response = self.api_post(
+            self.tenant_register_url,
+            {
+                "schema_name": "team_green",
+                "domain": "team-green.example.com",
+            },
+            user=self.owner_user,
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("platform admins", response.json()["error"])
+
+    def test_product_owner_can_query_developer_effectiveness(self):
+        _, defect_id = self.create_defect(title="effectiveness-endpoint", tester_id="tester-effect")
+        self.move_defect_to_fixed(defect_id)
+
+        response = self.api_get(
+            self.developer_effectiveness_url(self.dev_user.username),
+            user=self.owner_user,
+        )
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["developer_id"], self.dev_user.username)
+        self.assertEqual(body["fixed"], 1)
+        self.assertEqual(body["reopened"], 0)
+        self.assertEqual(body["classification"], "Insufficient data")
+
+    def test_developer_cannot_query_effectiveness(self):
+        response = self.api_get(
+            self.developer_effectiveness_url(self.dev_user.username),
+            user=self.dev_user,
+        )
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("product owners", response.json()["error"])
+
+    def test_effectiveness_rejects_non_team_developer(self):
+        response = self.api_get(
+            self.developer_effectiveness_url("dev-999"),
+            user=self.owner_user,
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("not in the current product owner's team", response.json()["error"])

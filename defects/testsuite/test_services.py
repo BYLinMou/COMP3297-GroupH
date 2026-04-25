@@ -6,7 +6,7 @@ from django.test import TestCase
 from unittest.mock import patch
 
 from defects.authz import ActorContext, ROLE_DEVELOPER, ROLE_OWNER, actor_from_user
-from defects.models import DefectComment, DefectReport, DefectStatus, Product, ProductDeveloper
+from defects.models import DefectComment, DefectReport, DefectStatus, Product, ProductDeveloper, Tenant
 from defects.services import (
     _demo_dt,
     _record_status_change,
@@ -14,7 +14,9 @@ from defects.services import (
     create_defect,
     ensure_demo_seed,
     next_report_id,
+    register_tenant,
     register_product,
+    summarize_developer_effectiveness,
 )
 
 
@@ -366,3 +368,116 @@ class DefectServiceTests(TestCase):
             [dev.username, dev.username],
         )
         self.assertEqual(ProductDeveloper.objects.filter(product=product_with_dedupe).count(), 1)
+
+    def test_root_status_change_notifies_duplicate_chain(self):
+        DefectReport.objects.create(
+            report_id="BT-RP-2405",
+            product=self.product,
+            version="1.0.4",
+            title="Duplicate child",
+            description="desc",
+            steps="steps",
+            tester_id="tester-dup",
+            tester_email="duplicate@example.com",
+            status=DefectStatus.NEW,
+            duplicate_of=self.defect,
+        )
+
+        apply_action(
+            self.defect,
+            "accept_open",
+            {"severity": "High", "priority": "P1"},
+            self.owner_actor,
+        )
+
+        self.assertEqual(len(mail.outbox), 2)
+        recipients = sorted(msg.to[0] for msg in mail.outbox)
+        self.assertEqual(recipients, ["duplicate@example.com", "tester@example.com"])
+        self.assertIn("Duplicate Chain Notice", mail.outbox[1].subject)
+
+    def test_non_root_transition_does_not_broadcast_to_other_duplicates(self):
+        root = DefectReport.objects.create(
+            report_id="BT-RP-2410",
+            product=self.product,
+            version="1.0.10",
+            title="Root",
+            description="desc",
+            steps="steps",
+            tester_id="tester-root",
+            tester_email="root@example.com",
+            status=DefectStatus.NEW,
+        )
+        child = DefectReport.objects.create(
+            report_id="BT-RP-2411",
+            product=self.product,
+            version="1.0.11",
+            title="Child",
+            description="desc",
+            steps="steps",
+            tester_id="tester-child",
+            tester_email="child@example.com",
+            status=DefectStatus.NEW,
+            duplicate_of=root,
+        )
+        DefectReport.objects.create(
+            report_id="BT-RP-2412",
+            product=self.product,
+            version="1.0.12",
+            title="Sibling",
+            description="desc",
+            steps="steps",
+            tester_id="tester-sibling",
+            tester_email="sibling@example.com",
+            status=DefectStatus.NEW,
+            duplicate_of=root,
+        )
+
+        apply_action(child, "duplicate", {"duplicate_of": root.report_id}, self.owner_actor)
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["child@example.com"])
+
+    def test_register_tenant_validates_and_persists(self):
+        with self.assertRaisesMessage(ValidationError, "schema_name cannot be empty."):
+            register_tenant("", "team-a.example.com")
+        with self.assertRaisesMessage(ValidationError, "schema_name cannot use reserved names."):
+            register_tenant("public", "team-a.example.com")
+        with self.assertRaisesMessage(ValidationError, "Invalid domain format"):
+            register_tenant("team_a", "invalid_domain")
+
+        tenant = register_tenant("team_a", "team-a.example.com", "Team A")
+        self.assertEqual(tenant.schema_name, "team_a")
+        self.assertEqual(tenant.domain, "team-a.example.com")
+        self.assertTrue(Tenant.objects.filter(schema_name="team_a").exists())
+
+        with self.assertRaisesMessage(ValidationError, "schema_name already exists."):
+            register_tenant("team_a", "team-b.example.com")
+        with self.assertRaisesMessage(ValidationError, "domain already exists."):
+            register_tenant("team_b", "team-a.example.com")
+
+    def test_summarize_developer_effectiveness_requires_owner_team_membership(self):
+        with self.assertRaisesMessage(ValidationError, "not in the current product owner's team"):
+            summarize_developer_effectiveness("owner-001", "dev-404")
+
+    def test_summarize_developer_effectiveness_returns_counts(self):
+        defect = DefectReport.objects.create(
+            report_id="BT-RP-2413",
+            product=self.product,
+            version="1.0.13",
+            title="Effectiveness defect",
+            description="desc",
+            steps="steps",
+            tester_id="tester-eff",
+            status=DefectStatus.NEW,
+        )
+
+        apply_action(defect, "accept_open", {"severity": "High", "priority": "P1"}, self.owner_actor)
+        apply_action(defect, "take_ownership", {}, self.developer_actor)
+        apply_action(defect, "set_fixed", {"fix_note": "fixed"}, self.developer_actor)
+        apply_action(defect, "reopen", {"retest_note": "reopened"}, self.owner_actor)
+
+        result = summarize_developer_effectiveness("owner-001", "dev-001")
+        self.assertEqual(result["developer_id"], "dev-001")
+        self.assertEqual(result["fixed"], 1)
+        self.assertEqual(result["reopened"], 1)
+        self.assertEqual(result["classification"], "Insufficient data")

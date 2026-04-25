@@ -1,4 +1,5 @@
 from datetime import datetime
+import re
 from typing import Any
 
 from django.conf import settings
@@ -19,7 +20,9 @@ from .models import (
     Product,
     ProductDeveloper,
     Severity,
+    Tenant,
 )
+from .effectiveness import classify_developer
 
 STATUS_STYLE = {
     DefectStatus.NEW: "status-new",
@@ -48,6 +51,11 @@ LEGACY_DEMO_REPORT_IDS = {
     "BT-RP-2475",
     "BT-RP-2476",
 }
+
+SCHEMA_NAME_RE = re.compile(r"^[a-z][a-z0-9_]{1,62}$")
+DOMAIN_RE = re.compile(
+    r"^(?=.{3,255}$)([a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)(\.[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?)+$"
+)
 
 def ensure_demo_seed() -> None:
     _ensure_demo_users()
@@ -214,6 +222,51 @@ def _notify_status_change(defect: DefectReport) -> None:
     )
 
 
+def _iter_duplicate_descendants(root_defect: DefectReport) -> list[DefectReport]:
+    descendants: list[DefectReport] = []
+    seen_ids = {root_defect.report_id}
+    queue = [root_defect.report_id]
+    head = 0
+
+    while head < len(queue):
+        parent_id = queue[head]
+        head += 1
+        children = list(DefectReport.objects.filter(duplicate_of_id=parent_id).order_by("report_id"))
+        for child in children:
+            if child.report_id in seen_ids:
+                continue
+            seen_ids.add(child.report_id)
+            descendants.append(child)
+            queue.append(child.report_id)
+
+    return descendants
+
+
+def _notify_duplicate_chain_on_root_change(defect: DefectReport) -> None:
+    if defect.duplicate_of_id:
+        return
+
+    for linked in _iter_duplicate_descendants(defect):
+        if not linked.tester_email:
+            continue
+        send_mail(
+            subject=f"[BetaTrax] Duplicate Chain Notice: Root defect {defect.report_id} changed to {defect.status}",
+            message=(
+                f"Your duplicate defect {linked.report_id} is linked to root defect {defect.report_id}.\n"
+                f"Current root defect status: {defect.status}\n"
+                f"Product: {defect.product_id}\n"
+            ),
+            from_email=settings.DEFAULT_FROM_EMAIL,
+            recipient_list=[linked.tester_email],
+            fail_silently=True,
+        )
+
+
+def _notify_transition(defect: DefectReport) -> None:
+    _notify_status_change(defect)
+    _notify_duplicate_chain_on_root_change(defect)
+
+
 def apply_action(defect: DefectReport, action: str, payload: dict[str, Any], actor: ActorContext) -> str:
     current = defect.status
 
@@ -237,7 +290,7 @@ def apply_action(defect: DefectReport, action: str, payload: dict[str, Any], act
         defect.decided_at = timezone.now()
         defect.save(update_fields=["severity", "priority", "backlog_ref", "status", "decided_at", "updated_at"])
         _record_status_change(defect, current, defect.status, actor.actor_id)
-        _notify_status_change(defect)
+        _notify_transition(defect)
         return "Defect accepted and moved to Open."
 
     if action == "reject":
@@ -251,7 +304,7 @@ def apply_action(defect: DefectReport, action: str, payload: dict[str, Any], act
         defect.decided_at = timezone.now()
         defect.save(update_fields=["status", "decided_at", "updated_at"])
         _record_status_change(defect, current, defect.status, actor.actor_id)
-        _notify_status_change(defect)
+        _notify_transition(defect)
         return "Defect moved to Rejected."
 
     if action == "duplicate":
@@ -271,7 +324,7 @@ def apply_action(defect: DefectReport, action: str, payload: dict[str, Any], act
         defect.decided_at = timezone.now()
         defect.save(update_fields=["duplicate_of", "status", "decided_at", "updated_at"])
         _record_status_change(defect, current, defect.status, actor.actor_id)
-        _notify_status_change(defect)
+        _notify_transition(defect)
         return "Defect moved to Duplicate."
 
     if action == "take_ownership":
@@ -286,7 +339,7 @@ def apply_action(defect: DefectReport, action: str, payload: dict[str, Any], act
         defect.decided_at = timezone.now()
         defect.save(update_fields=["assignee_id", "status", "decided_at", "updated_at"])
         _record_status_change(defect, current, defect.status, actor.actor_id)
-        _notify_status_change(defect)
+        _notify_transition(defect)
         return f"Assigned to {actor.actor_id}."
 
     if action == "set_fixed":
@@ -301,7 +354,7 @@ def apply_action(defect: DefectReport, action: str, payload: dict[str, Any], act
         defect.decided_at = timezone.now()
         defect.save(update_fields=["fix_note", "status", "decided_at", "updated_at"])
         _record_status_change(defect, current, defect.status, actor.actor_id)
-        _notify_status_change(defect)
+        _notify_transition(defect)
         return "Defect moved to Fixed."
 
     if action == "cannot_reproduce":
@@ -316,7 +369,7 @@ def apply_action(defect: DefectReport, action: str, payload: dict[str, Any], act
         defect.decided_at = timezone.now()
         defect.save(update_fields=["fix_note", "status", "decided_at", "updated_at"])
         _record_status_change(defect, current, defect.status, actor.actor_id)
-        _notify_status_change(defect)
+        _notify_transition(defect)
         return "Defect moved to Cannot Reproduce."
 
     if action == "set_resolved":
@@ -331,7 +384,7 @@ def apply_action(defect: DefectReport, action: str, payload: dict[str, Any], act
         defect.decided_at = timezone.now()
         defect.save(update_fields=["retest_note", "status", "decided_at", "updated_at"])
         _record_status_change(defect, current, defect.status, actor.actor_id)
-        _notify_status_change(defect)
+        _notify_transition(defect)
         return "Defect moved to Resolved."
 
     if action == "reopen":
@@ -346,7 +399,7 @@ def apply_action(defect: DefectReport, action: str, payload: dict[str, Any], act
         defect.decided_at = timezone.now()
         defect.save(update_fields=["retest_note", "status", "decided_at", "updated_at"])
         _record_status_change(defect, current, defect.status, actor.actor_id)
-        _notify_status_change(defect)
+        _notify_transition(defect)
         return "Defect moved to Reopened."
 
     if action == "add_comment":
@@ -414,3 +467,75 @@ def register_product(owner_user, product_id, product_name, developer_ids):
         ProductDeveloper.objects.create(product=new_product, developer_id=developer_id)
 
     return new_product
+
+
+def register_tenant(schema_name: str, domain: str, name: str = "") -> Tenant:
+    normalized_schema = (schema_name or "").strip().lower()
+    normalized_domain = (domain or "").strip().lower()
+    normalized_name = (name or "").strip()
+
+    if not normalized_schema:
+        raise ValidationError("schema_name cannot be empty.")
+    if normalized_schema in {"public", "information_schema"}:
+        raise ValidationError("schema_name cannot use reserved names.")
+    if not SCHEMA_NAME_RE.match(normalized_schema):
+        raise ValidationError(
+            "Invalid schema_name format. Use lowercase letters, digits, and underscores, and start with a letter."
+        )
+
+    if not normalized_domain:
+        raise ValidationError("domain cannot be empty.")
+    if not DOMAIN_RE.match(normalized_domain):
+        raise ValidationError("Invalid domain format. Please provide a valid domain name.")
+
+    if Tenant.objects.filter(schema_name=normalized_schema).exists():
+        raise ValidationError("schema_name already exists.")
+    if Tenant.objects.filter(domain=normalized_domain).exists():
+        raise ValidationError("domain already exists.")
+
+    return Tenant.objects.create(
+        schema_name=normalized_schema,
+        domain=normalized_domain,
+        name=normalized_name,
+    )
+
+
+def summarize_developer_effectiveness(owner_id: str, developer_id: str) -> dict[str, Any]:
+    normalized_owner = (owner_id or "").strip()
+    normalized_developer = (developer_id or "").strip()
+
+    if not normalized_owner:
+        raise ValidationError("owner_id cannot be empty.")
+    if not normalized_developer:
+        raise ValidationError("developer_id cannot be empty.")
+
+    in_owner_team = ProductDeveloper.objects.filter(
+        product__owner_id=normalized_owner,
+        developer_id=normalized_developer,
+    ).exists()
+    if not in_owner_team:
+        raise ValidationError("The developer is not in the current product owner's team.")
+
+    owner_defects = DefectReport.objects.filter(
+        product__owner_id=normalized_owner,
+        assignee_id=normalized_developer,
+    )
+    fixed_count = DefectStatusHistory.objects.filter(
+        defect__in=owner_defects,
+        to_status=DefectStatus.FIXED,
+        actor_id=normalized_developer,
+    ).count()
+    reopened_count = DefectStatusHistory.objects.filter(
+        defect__in=owner_defects,
+        to_status=DefectStatus.REOPENED,
+    ).count()
+
+    classification = classify_developer(fixed_count, reopened_count)
+    ratio = (reopened_count / fixed_count) if fixed_count else None
+    return {
+        "developer_id": normalized_developer,
+        "fixed": fixed_count,
+        "reopened": reopened_count,
+        "reopen_ratio": ratio,
+        "classification": classification,
+    }

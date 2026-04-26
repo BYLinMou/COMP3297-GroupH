@@ -50,3 +50,22 @@ def register_tenant(schema_name: str, domain: str, name: str = "") -> Tenant:
         defaults={"tenant": tenant, "is_primary": True},
     )
     return tenant
+
+
+@transaction.atomic
+def add_tenant_domain(tenant: Tenant, domain: str, is_primary: bool = False) -> Domain:
+    normalized_domain = (domain or "").strip().lower()
+    if not normalized_domain:
+        raise ValidationError("domain cannot be empty.")
+    if not DOMAIN_RE.match(normalized_domain):
+        raise ValidationError("Invalid domain format. Please provide a valid domain name.")
+    if Tenant.objects.filter(domain=normalized_domain).exists():
+        raise ValidationError("domain already exists.")
+    if Domain.objects.filter(domain=normalized_domain).exists():
+        raise ValidationError("domain already exists.")
+
+    return Domain.objects.create(
+        domain=normalized_domain,
+        tenant=tenant,
+        is_primary=is_primary,
+    )

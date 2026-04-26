@@ -37,7 +37,7 @@ No tenant for hostname "..."
 
 That means the server is running, but the hostname is not mapped to a tenant.
 
-If `SHOW_PUBLIC_IF_NO_TENANT_FOUND=True`, an allowed hostname without a tenant mapping uses the public schema URL set instead. That public URL set exposes platform admin and tenant registration, not tenant business pages.
+If the hostname is listed in `PUBLIC_SCHEMA_DOMAINS`, it uses the public schema URL set. That public URL set exposes the platform tenant console, platform admin, and tenant registration, not tenant business pages.
 
 ## Local .env
 
@@ -55,6 +55,7 @@ POSTGRES_PORT=5432
 
 AUTO_MIGRATE=True
 DATABASE_WAIT_TIMEOUT=60
+PUBLIC_SCHEMA_DOMAINS=platform.localhost
 SHOW_PUBLIC_IF_NO_TENANT_FOUND=True
 ```
 
@@ -63,6 +64,8 @@ If you only want normal single-database mode, set:
 ```env
 ENABLE_DJANGO_TENANTS=False
 ```
+
+`PUBLIC_SCHEMA_DOMAINS` is the public/platform entrypoint. Do not create a `Domain` row for that hostname.
 
 ## Initialize An Empty Database
 
@@ -173,6 +176,40 @@ The admin model list depends on the current schema:
 - Tenant schema such as `local`, `team_a`, or `team_b`: shows tenant business models such as `Product`, `DefectReport`, comments, and status history.
 
 If you open `/admin/` through `http://127.0.0.1:8000/` and `127.0.0.1` is mapped to the `local` tenant, you are inside the `local` company schema. In that context, `Tenant` and `Domain` should not appear.
+
+## Platform Tenant Console
+
+Open the public tenant console through a hostname from `PUBLIC_SCHEMA_DOMAINS`:
+
+```text
+http://platform.localhost:8000/platform/tenants/
+```
+
+Unauthenticated users are redirected to:
+
+```text
+http://platform.localhost:8000/platform/login/
+```
+
+This page is for platform admins only. Platform users can be superusers or members of the `platform_admin` group. It can:
+
+- Show all tenants/companies.
+- Create a tenant/company with schema name, first domain, and company name.
+- Add extra domains to an existing tenant/company.
+
+For local testing, add this to the Windows hosts file if needed:
+
+```text
+127.0.0.1 platform.localhost
+```
+
+Then make sure `platform.localhost` is in `.env`:
+
+```env
+PUBLIC_SCHEMA_DOMAINS=platform.localhost
+```
+
+Do not add `platform.localhost` to `tenancy.Domain`. Tenant domains are for company entrypoints such as `team-a.localhost`; public domains are for platform administration.
 
 ## Check Current Tenants
 

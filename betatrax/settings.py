@@ -62,6 +62,11 @@ ALLOWED_HOSTS = _split_csv_env("DJANGO_ALLOWED_HOSTS")
 if not ALLOWED_HOSTS:
     ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
 
+PUBLIC_SCHEMA_DOMAINS = _split_csv_env("PUBLIC_SCHEMA_DOMAINS")
+for public_domain in PUBLIC_SCHEMA_DOMAINS:
+    if public_domain not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(public_domain)
+
 CSRF_TRUSTED_ORIGINS = _split_csv_env("DJANGO_CSRF_TRUSTED_ORIGINS")
 
 # Always trust local development origins to avoid CSRF false positives
@@ -147,7 +152,7 @@ MIDDLEWARE = [
 ]
 
 if USE_DJANGO_TENANTS:
-    MIDDLEWARE.insert(0, 'django_tenants.middleware.main.TenantMainMiddleware')
+    MIDDLEWARE.insert(0, 'tenancy.middleware.PublicDomainTenantMiddleware')
     PUBLIC_SCHEMA_URLCONF = 'betatrax.public_urls'
     SHOW_PUBLIC_IF_NO_TENANT_FOUND = _env_flag("SHOW_PUBLIC_IF_NO_TENANT_FOUND", "True")
 

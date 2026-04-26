@@ -139,6 +139,7 @@ Set these variables in `.env` when using PostgreSQL:
 Optional tenant middleware wiring can be enabled with:
 
 - `ENABLE_DJANGO_TENANTS=True`
+- `PUBLIC_SCHEMA_DOMAINS=platform.example.com`
 
 When tenant mode is enabled, BetaTrax configures `SHARED_APPS`, `TENANT_APPS`,
 `TENANT_MODEL=tenancy.Tenant`, `TENANT_DOMAIN_MODEL=tenancy.Domain`, and the
@@ -156,9 +157,15 @@ By default, this flag is disabled to keep local/CI setup simple. Use normal
 `python manage.py migrate` when `ENABLE_DJANGO_TENANTS=False` and you are not
 starting through Docker.
 
-When `SHOW_PUBLIC_IF_NO_TENANT_FOUND=True`, allowed hosts that do not match a
-tenant domain use the public schema URL set. Public routes expose tenant
-registration/admin only; product and defect routes are tenant-scoped.
+Use `PUBLIC_SCHEMA_DOMAINS` for platform/admin hostnames that should always use
+the public schema. Do not create `Domain` rows for those hostnames. Public routes
+expose `/platform/tenants/`, `/admin/`, tenant registration, and API docs only;
+product and defect routes are tenant-scoped.
+
+Example deployment split:
+
+- `platform.example.com` -> public schema tenant console
+- `company-a.example.com` -> tenant schema selected by a `Domain` row
 
 ## Automated Testing
 

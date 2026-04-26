@@ -91,9 +91,17 @@ COMP3297-GroupH/
 |   +-- __init__.py
 |   +-- admin.py
 |   +-- apps.py
+|   +-- middleware.py
 |   +-- models.py
 |   +-- serializers.py
 |   +-- services.py
+|   +-- static/
+|   |   +-- tenancy/
+|   |       +-- platform.css
+|   +-- templates/
+|   |   +-- tenancy/
+|   |       +-- platform_login.html
+|   |       +-- tenant_console.html
 |   +-- tests.py
 |   +-- utils.py
 |   +-- views.py
@@ -198,7 +206,11 @@ Public schema URL routing when tenant mode is enabled:
 
 | Path | Target |
 | --- | --- |
+| `/` | Redirects to `/platform/tenants/` |
+| `/platform/login/` | Platform tenant console login |
+| `/platform/logout/` | Platform tenant console logout |
 | `/admin/` | Django admin for shared/platform models |
+| `/platform/tenants/` | Platform tenant console |
 | `/api/tenants/register/` | `TenantRegisterApi` |
 | `/api/schema/` | OpenAPI schema when drf-spectacular is installed |
 | `/api/docs/` | Swagger UI when drf-spectacular is installed |
@@ -420,6 +432,22 @@ Rules:
 
 In tenant mode, creating `tenancy.Tenant` uses `TenantMixin.auto_create_schema=True`, so a new PostgreSQL schema is created and migrated.
 
+### Platform Tenant Console
+
+`tenancy.views.platform_tenant_list` renders the public-schema tenant management UI at:
+
+```text
+/platform/tenants/
+```
+
+Rules:
+
+- Only public schema can access it.
+- Only platform admins or superusers can access it.
+- It has its own login/logout routes, so `platform_admin` group users do not need Django admin staff access.
+- It lists tenants, domains, and public platform domains from `PUBLIC_SCHEMA_DOMAINS`.
+- It can create tenants and add domains to existing tenants.
+
 ### Developer Effectiveness
 
 `DeveloperEffectivenessApi` calls `summarize_developer_effectiveness`.
@@ -522,11 +550,12 @@ flowchart TD
 Important behavior:
 
 - Tenant is selected by hostname before normal view logic runs.
-- If no `Domain.domain` matches the hostname, `SHOW_PUBLIC_IF_NO_TENANT_FOUND=True` routes to the public schema URL set; otherwise the app returns `No tenant for hostname`.
+- Hostnames listed in `PUBLIC_SCHEMA_DOMAINS` route to the public schema URL set.
+- If no `Domain.domain` matches the hostname and no public-domain rule applies, `SHOW_PUBLIC_IF_NO_TENANT_FOUND=True` routes to public schema; otherwise the app returns `No tenant for hostname`.
 - Shared/public schema stores tenant registry data in `tenancy`.
 - Tenant schemas store tenant-scoped product and defect data in `defects`.
 - Public schema routes use `betatrax.public_urls`; tenant routes use `betatrax.urls`.
-- `SHOW_PUBLIC_IF_NO_TENANT_FOUND=True` lets allowed hosts without a tenant mapping use public routes for initial tenant registration.
+- `PUBLIC_SCHEMA_DOMAINS` is the preferred deployment setting for the platform tenant console.
 
 See `documents/tenant-usage.md` for operational commands and local testing steps.
 
@@ -616,6 +645,7 @@ Important variables:
 | `POSTGRES_HOST` | PostgreSQL host |
 | `POSTGRES_PORT` | PostgreSQL port |
 | `ENABLE_DJANGO_TENANTS` | Enables django-tenants mode |
+| `PUBLIC_SCHEMA_DOMAINS` | Comma-separated public/platform hostnames |
 | `SHOW_PUBLIC_IF_NO_TENANT_FOUND` | Uses public URL routes when an allowed host has no tenant domain |
 | `AUTO_MIGRATE` | Runs migration on container startup |
 | `DATABASE_WAIT_TIMEOUT` | Database wait timeout in seconds |

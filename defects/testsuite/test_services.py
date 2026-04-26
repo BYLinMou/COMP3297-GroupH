@@ -6,7 +6,7 @@ from django.test import TestCase
 from unittest.mock import patch
 
 from defects.authz import ActorContext, ROLE_DEVELOPER, ROLE_OWNER, actor_from_user
-from defects.models import DefectComment, DefectReport, DefectStatus, Product, ProductDeveloper, Tenant
+from defects.models import DefectComment, DefectReport, DefectStatus, Domain, Product, ProductDeveloper, Tenant
 from defects.services import (
     _demo_dt,
     _iter_duplicate_descendants,
@@ -499,6 +499,7 @@ class DefectServiceTests(TestCase):
         self.assertEqual(tenant.schema_name, "team_a")
         self.assertEqual(tenant.domain, "team-a.example.com")
         self.assertTrue(Tenant.objects.filter(schema_name="team_a").exists())
+        self.assertTrue(Domain.objects.filter(domain="team-a.example.com", tenant=tenant, is_primary=True).exists())
 
         with self.assertRaisesMessage(ValidationError, "schema_name already exists."):
             register_tenant("team_a", "team-b.example.com")

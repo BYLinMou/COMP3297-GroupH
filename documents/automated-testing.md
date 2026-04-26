@@ -88,6 +88,15 @@ python -m coverage xml -o coverage.xml
 python -m coverage html
 ```
 
+Run a tenant-mode configuration check against PostgreSQL:
+
+```powershell
+$env:ENABLE_DJANGO_TENANTS='True'
+$env:DATABASE_ENGINE='postgresql'
+python manage.py check
+python manage.py migrate_schemas --shared --noinput
+```
+
 Run focused branch+statement coverage for classification module:
 
 ```powershell

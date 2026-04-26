@@ -1,6 +1,6 @@
 from django.contrib import admin
 
-from .models import DefectComment, DefectReport, DefectStatusHistory, Product, ProductDeveloper, Tenant
+from .models import DefectComment, DefectReport, DefectStatusHistory, Domain, Product, ProductDeveloper, Tenant
 
 
 @admin.register(Product)
@@ -41,3 +41,10 @@ class TenantAdmin(admin.ModelAdmin):
     list_display = ("schema_name", "domain", "name", "is_active", "created_at")
     list_filter = ("is_active",)
     search_fields = ("schema_name", "domain", "name")
+
+
+@admin.register(Domain)
+class DomainAdmin(admin.ModelAdmin):
+    list_display = ("domain", "tenant", "is_primary")
+    list_filter = ("is_primary",)
+    search_fields = ("domain", "tenant__schema_name")

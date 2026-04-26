@@ -20,6 +20,7 @@ from .models import (
     Product,
     ProductDeveloper,
     Severity,
+    Domain,
     Tenant,
 )
 from .effectiveness import classify_developer
@@ -493,11 +494,16 @@ def register_tenant(schema_name: str, domain: str, name: str = "") -> Tenant:
     if Tenant.objects.filter(domain=normalized_domain).exists():
         raise ValidationError("domain already exists.")
 
-    return Tenant.objects.create(
+    tenant = Tenant.objects.create(
         schema_name=normalized_schema,
         domain=normalized_domain,
         name=normalized_name,
     )
+    Domain.objects.get_or_create(
+        domain=normalized_domain,
+        defaults={"tenant": tenant, "is_primary": True},
+    )
+    return tenant
 
 
 def summarize_developer_effectiveness(owner_id: str, developer_id: str) -> dict[str, Any]:

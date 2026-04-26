@@ -125,7 +125,16 @@ Optional tenant middleware wiring can be enabled with:
 
 - `ENABLE_DJANGO_TENANTS=True`
 
-By default, this flag is disabled to keep local/CI setup simple.
+When tenant mode is enabled, BetaTrax configures `SHARED_APPS`, `TENANT_APPS`,
+`TENANT_MODEL=defects.Tenant`, `TENANT_DOMAIN_MODEL=defects.Domain`, and the
+`django_tenants.postgresql_backend` database backend. Run shared migrations with:
+
+```bash
+python manage.py migrate_schemas --shared
+```
+
+By default, this flag is disabled to keep local/CI setup simple. Use normal
+`python manage.py migrate` when `ENABLE_DJANGO_TENANTS=False`.
 
 ## Automated Testing
 
@@ -250,6 +259,9 @@ Responses:
 - `201` created
 - `400` validation failure
 - `403` non-platform-admin account
+
+In tenant mode, successful registration creates the tenant row, a primary
+`Domain` row, and the PostgreSQL schema for that tenant.
 
 ### 2) Developer effectiveness metric
 

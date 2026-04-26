@@ -82,7 +82,7 @@ USE_X_FORWARDED_HOST = True
 
 USE_DJANGO_TENANTS = _env_flag("ENABLE_DJANGO_TENANTS", "False") and HAS_DJANGO_TENANTS
 
-INSTALLED_APPS = [
+BASE_INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -95,10 +95,43 @@ INSTALLED_APPS = [
 ]
 
 if HAS_DRF_SPECTACULAR:
-    INSTALLED_APPS.append('drf_spectacular')
+    BASE_INSTALLED_APPS.append('drf_spectacular')
 
-if USE_DJANGO_TENANTS and 'django_tenants' not in INSTALLED_APPS:
-    INSTALLED_APPS.insert(0, 'django_tenants')
+TENANT_MODEL = 'defects.Tenant'
+TENANT_DOMAIN_MODEL = 'defects.Domain'
+
+if USE_DJANGO_TENANTS:
+    SHARED_APPS = [
+        'django_tenants',
+        'django.contrib.admin',
+        'django.contrib.auth',
+        'django.contrib.contenttypes',
+        'django.contrib.sessions',
+        'django.contrib.messages',
+        'django.contrib.staticfiles',
+        'rest_framework',
+        'defects',
+    ]
+    if HAS_DRF_SPECTACULAR:
+        SHARED_APPS.append('drf_spectacular')
+
+    TENANT_APPS = [
+        'django.contrib.admin',
+        'django.contrib.auth',
+        'django.contrib.contenttypes',
+        'django.contrib.sessions',
+        'django.contrib.messages',
+        'django.contrib.staticfiles',
+        'rest_framework',
+        'defects',
+        'frontend',
+    ]
+    if HAS_DRF_SPECTACULAR:
+        TENANT_APPS.append('drf_spectacular')
+
+    INSTALLED_APPS = SHARED_APPS + [app for app in TENANT_APPS if app not in SHARED_APPS]
+else:
+    INSTALLED_APPS = BASE_INSTALLED_APPS
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -159,8 +192,6 @@ else:
 if USE_DJANGO_TENANTS:
     DATABASES['default']['ENGINE'] = 'django_tenants.postgresql_backend'
     DATABASE_ROUTERS = ('django_tenants.routers.TenantSyncRouter',)
-    TENANT_MODEL = 'defects.Tenant'
-    TENANT_DOMAIN_MODEL = 'defects.Tenant'
 
 
 # Password validation

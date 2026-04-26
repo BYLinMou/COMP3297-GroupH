@@ -230,7 +230,7 @@ The `defects` app is the core domain layer.
 | `authz.py` | Role extraction from Django users/groups |
 | `effectiveness.py` | Developer effectiveness classification function |
 | `urls.py` | Defect API URL routes |
-| `signals.py` | Runs demo seed helper after migrations |
+| `signals.py` | Runs demo seed helper after migrations when defect tables exist; skips tenant public-schema migrations |
 | `admin.py` | Django admin registration |
 | `testsuite/` | API, service, view-factory, and effectiveness tests |
 | `tests.py` | Compatibility test entrypoint |

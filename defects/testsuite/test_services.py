@@ -1,9 +1,12 @@
+from types import SimpleNamespace
+from unittest.mock import patch
+
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core import mail
 from django.core.exceptions import ValidationError
-from django.test import TestCase
-from unittest.mock import patch
+from django.db.utils import ProgrammingError
+from django.test import TestCase, override_settings
 
 from defects.authz import ActorContext, ROLE_DEVELOPER, ROLE_OWNER, actor_from_user
 from defects.models import DefectComment, DefectReport, DefectStatus, Product, ProductDeveloper
@@ -18,8 +21,56 @@ from defects.services import (
     register_product,
     summarize_developer_effectiveness,
 )
+from defects.signals import _defect_tables_ready, _should_seed_demo_data, seed_demo_data
 from tenancy.models import Domain, Tenant
 from tenancy.services import register_tenant
+
+
+class DefectSignalTests(TestCase):
+    def test_seed_signal_ignores_non_defects_sender(self):
+        sender = SimpleNamespace(name="auth")
+
+        self.assertFalse(_should_seed_demo_data(sender))
+
+        with patch("defects.signals.ensure_demo_seed") as mocked_seed:
+            seed_demo_data(sender)
+
+        mocked_seed.assert_not_called()
+
+    @override_settings(USE_DJANGO_TENANTS=True)
+    def test_seed_signal_skips_public_schema_in_tenant_mode(self):
+        sender = SimpleNamespace(name="defects")
+
+        with patch("defects.signals.is_public_schema_context", return_value=True):
+            self.assertFalse(_should_seed_demo_data(sender))
+
+            with patch("defects.signals.ensure_demo_seed") as mocked_seed:
+                seed_demo_data(sender)
+
+        mocked_seed.assert_not_called()
+
+    @override_settings(USE_DJANGO_TENANTS=False)
+    def test_seed_signal_runs_when_defect_tables_exist(self):
+        sender = SimpleNamespace(name="defects")
+
+        self.assertTrue(_defect_tables_ready())
+        self.assertTrue(_should_seed_demo_data(sender))
+
+        with patch("defects.signals.ensure_demo_seed") as mocked_seed:
+            seed_demo_data(sender)
+
+        mocked_seed.assert_called_once_with()
+
+    @override_settings(USE_DJANGO_TENANTS=False)
+    def test_seed_signal_skips_when_tables_are_not_ready(self):
+        sender = SimpleNamespace(name="defects")
+
+        with patch("defects.signals.connection.introspection.table_names", return_value=[]):
+            self.assertFalse(_defect_tables_ready())
+            self.assertFalse(_should_seed_demo_data(sender))
+
+        with patch("defects.signals.connection.introspection.table_names", side_effect=ProgrammingError("missing")):
+            self.assertFalse(_defect_tables_ready())
 
 
 class DefectServiceTests(TestCase):

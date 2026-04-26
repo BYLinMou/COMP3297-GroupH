@@ -72,6 +72,8 @@ C:\Users\User\.conda\envs\betatrax\python.exe manage.py migrate_schemas --shared
 ```
 
 This creates the public/shared tables, including `tenancy_tenant` and `tenancy_domain`.
+Demo defect seed data is skipped during this public-schema migration because
+`defects_*` tables are tenant-scoped and are created inside tenant schemas.
 
 If you are using Docker with the project entrypoint and `AUTO_MIGRATE=True`, the container runs this automatically when `ENABLE_DJANGO_TENANTS=True`.
 

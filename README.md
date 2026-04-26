@@ -147,6 +147,9 @@ run:
 python manage.py migrate_schemas --shared
 ```
 
+Demo defect seed data is skipped during shared/public migrations because defect
+tables live inside tenant schemas.
+
 By default, this flag is disabled to keep local/CI setup simple. Use normal
 `python manage.py migrate` when `ENABLE_DJANGO_TENANTS=False` and you are not
 starting through Docker.

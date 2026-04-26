@@ -3,6 +3,7 @@ branch = True
 source =
     defects
     frontend
+    tenancy
 omit =
     */migrations/*
     */tests.py

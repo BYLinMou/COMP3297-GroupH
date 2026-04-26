@@ -7,8 +7,8 @@ from defects.views import (
     DefectDetailApi,
     DefectListApi,
     DeveloperEffectivenessApi,
-    TenantRegisterApi,
 )
+from tenancy.views import TenantRegisterApi
 
 from .base import DefectApiTestCase
 

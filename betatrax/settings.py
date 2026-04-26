@@ -92,6 +92,7 @@ BASE_INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'tenancy',
     'defects',
     'frontend',
 ]
@@ -99,8 +100,8 @@ BASE_INSTALLED_APPS = [
 if HAS_DRF_SPECTACULAR:
     BASE_INSTALLED_APPS.append('drf_spectacular')
 
-TENANT_MODEL = 'defects.Tenant'
-TENANT_DOMAIN_MODEL = 'defects.Domain'
+TENANT_MODEL = 'tenancy.Tenant'
+TENANT_DOMAIN_MODEL = 'tenancy.Domain'
 
 if USE_DJANGO_TENANTS:
     SHARED_APPS = [
@@ -112,7 +113,7 @@ if USE_DJANGO_TENANTS:
         'django.contrib.messages',
         'django.contrib.staticfiles',
         'rest_framework',
-        'defects',
+        'tenancy',
     ]
     if HAS_DRF_SPECTACULAR:
         SHARED_APPS.append('drf_spectacular')
@@ -147,6 +148,8 @@ MIDDLEWARE = [
 
 if USE_DJANGO_TENANTS:
     MIDDLEWARE.insert(0, 'django_tenants.middleware.main.TenantMainMiddleware')
+    PUBLIC_SCHEMA_URLCONF = 'betatrax.public_urls'
+    SHOW_PUBLIC_IF_NO_TENANT_FOUND = _env_flag("SHOW_PUBLIC_IF_NO_TENANT_FOUND", "True")
 
 ROOT_URLCONF = 'betatrax.urls'
 

@@ -18,7 +18,8 @@ from django.conf import settings
 from django.contrib import admin
 from django.contrib.staticfiles.views import serve as staticfiles_serve
 from django.urls import include, path
-from defects.views import DeveloperEffectivenessApi, ProductRegisterApi, TenantRegisterApi
+from defects.views import DeveloperEffectivenessApi, ProductRegisterApi
+from tenancy.views import TenantRegisterApi
 
 try:
     from drf_spectacular.views import SpectacularAPIView, SpectacularSwaggerView

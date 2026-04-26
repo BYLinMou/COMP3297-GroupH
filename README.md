@@ -141,8 +141,10 @@ Optional tenant middleware wiring can be enabled with:
 - `ENABLE_DJANGO_TENANTS=True`
 
 When tenant mode is enabled, BetaTrax configures `SHARED_APPS`, `TENANT_APPS`,
-`TENANT_MODEL=defects.Tenant`, `TENANT_DOMAIN_MODEL=defects.Domain`, and the
-`django_tenants.postgresql_backend` database backend. In Docker, shared
+`TENANT_MODEL=tenancy.Tenant`, `TENANT_DOMAIN_MODEL=tenancy.Domain`, and the
+`django_tenants.postgresql_backend` database backend. The `tenancy` app stores
+company/tenant registry data in the public schema, while `defects` stores
+tenant-scoped product and defect data inside each company schema. In Docker, shared
 migrations are applied automatically by the entrypoint. For manual local setup,
 run:
 
@@ -153,6 +155,10 @@ python manage.py migrate_schemas --shared
 By default, this flag is disabled to keep local/CI setup simple. Use normal
 `python manage.py migrate` when `ENABLE_DJANGO_TENANTS=False` and you are not
 starting through Docker.
+
+When `SHOW_PUBLIC_IF_NO_TENANT_FOUND=True`, allowed hosts that do not match a
+tenant domain use the public schema URL set. Public routes expose tenant
+registration/admin only; product and defect routes are tenant-scoped.
 
 ## Automated Testing
 
@@ -279,7 +285,7 @@ Responses:
 - `403` non-platform-admin account
 
 In tenant mode, successful registration creates the tenant row, a primary
-`Domain` row, and the PostgreSQL schema for that tenant.
+`Domain` row in the public schema, and the PostgreSQL schema for that tenant.
 
 ### 2) Developer effectiveness metric
 

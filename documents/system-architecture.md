@@ -25,6 +25,7 @@ COMP3297-GroupH/
 +-- betatrax/
 |   +-- __init__.py
 |   +-- asgi.py
+|   +-- public_urls.py
 |   +-- settings.py
 |   +-- urls.py
 |   +-- wsgi.py
@@ -33,6 +34,7 @@ COMP3297-GroupH/
 |   |   +-- 0001_initial.py
 |   |   +-- 0002_tenant_model.py
 |   |   +-- 0003_alter_tenant_schema_name_domain.py
+|   |   +-- 0004_delete_domain_delete_tenant.py
 |   |   +-- __init__.py
 |   +-- testsuite/
 |   |   +-- __init__.py
@@ -82,6 +84,19 @@ COMP3297-GroupH/
 |   +-- tests.py
 |   +-- urls.py
 |   +-- views.py
++-- tenancy/
+|   +-- migrations/
+|   |   +-- 0001_initial.py
+|   |   +-- __init__.py
+|   +-- __init__.py
+|   +-- admin.py
+|   +-- apps.py
+|   +-- models.py
+|   +-- serializers.py
+|   +-- services.py
+|   +-- tests.py
+|   +-- utils.py
+|   +-- views.py
 +-- .coveragerc
 +-- .dockerignore
 +-- .env.example
@@ -120,6 +135,7 @@ flowchart LR
     URLs[betatrax.urls]
     Frontend[frontend views + templates]
     API[defects API views]
+    Tenancy[tenancy platform API]
     Serializers[DRF serializers]
     Services[defects.services]
     Authz[defects.authz]
@@ -130,6 +146,7 @@ flowchart LR
     Browser --> URLs
     URLs --> Frontend
     URLs --> API
+    URLs --> Tenancy
     API --> Serializers
     API --> Authz
     Frontend --> Authz
@@ -162,7 +179,7 @@ Main runtime configuration:
 
 ### `betatrax/urls.py`
 
-Root URL routing:
+Tenant URL routing:
 
 | Path | Target |
 | --- | --- |
@@ -174,6 +191,17 @@ Root URL routing:
 | `/api/schema/` | OpenAPI schema when drf-spectacular is installed |
 | `/api/docs/` | Swagger UI when drf-spectacular is installed |
 | `/` and frontend paths | `frontend.urls` |
+
+### `betatrax/public_urls.py`
+
+Public schema URL routing when tenant mode is enabled:
+
+| Path | Target |
+| --- | --- |
+| `/admin/` | Django admin for shared/platform models |
+| `/api/tenants/register/` | `TenantRegisterApi` |
+| `/api/schema/` | OpenAPI schema when drf-spectacular is installed |
+| `/api/docs/` | Swagger UI when drf-spectacular is installed |
 
 ## Backend App: `defects`
 
@@ -203,8 +231,6 @@ The `defects` app is the core domain layer.
 | --- | --- |
 | `Product` | Product registered by a Product Owner |
 | `ProductDeveloper` | Assignment of one developer to one product |
-| `Tenant` | Tenant registry row; in tenant mode also creates PostgreSQL schema |
-| `Domain` | Hostname-to-tenant mapping for `django-tenants` |
 | `DefectReport` | Main defect/bug report |
 | `DefectComment` | Comment attached to a defect |
 | `DefectStatusHistory` | Audit record for status transitions |
@@ -218,7 +244,6 @@ erDiagram
     DEFECT_REPORT ||--o{ DEFECT_COMMENT : has
     DEFECT_REPORT ||--o{ DEFECT_STATUS_HISTORY : has
     DEFECT_REPORT ||--o{ DEFECT_REPORT : duplicate_children
-    TENANT ||--o{ DOMAIN : maps
 
     PRODUCT {
         string product_id PK
@@ -270,6 +295,14 @@ erDiagram
         string actor_id
         datetime changed_at
     }
+
+```
+
+Tenant registry entities are stored separately in the `tenancy` app:
+
+```mermaid
+erDiagram
+    TENANT ||--o{ DOMAIN : maps
 
     TENANT {
         bigint id PK
@@ -375,7 +408,7 @@ Rules:
 
 ### Tenant Registration
 
-`TenantRegisterApi` calls `register_tenant`.
+`tenancy.views.TenantRegisterApi` calls `tenancy.services.register_tenant`.
 
 Rules:
 
@@ -385,7 +418,7 @@ Rules:
 - Domain must pass domain format validation.
 - Schema and domain must be unique.
 
-In tenant mode, creating `Tenant` uses `TenantMixin.auto_create_schema=True`, so a new PostgreSQL schema is created and migrated.
+In tenant mode, creating `tenancy.Tenant` uses `TenantMixin.auto_create_schema=True`, so a new PostgreSQL schema is created and migrated.
 
 ### Developer Effectiveness
 
@@ -474,8 +507,8 @@ When enabled:
 flowchart TD
     Request[HTTP request with Host header]
     Middleware[TenantMainMiddleware]
-    Domain[defects.Domain in public schema]
-    Tenant[defects.Tenant]
+    Domain[tenancy.Domain in public schema]
+    Tenant[tenancy.Tenant]
     Schema[PostgreSQL tenant schema]
     View[Django view]
 
@@ -489,14 +522,11 @@ flowchart TD
 Important behavior:
 
 - Tenant is selected by hostname before normal view logic runs.
-- If no `Domain.domain` matches the hostname, the app returns `No tenant for hostname`.
-- Shared/public schema stores tenant registry data.
-- Tenant schemas store tenant-scoped app data.
-
-Current implementation note:
-
-- `defects` appears in both `SHARED_APPS` and `TENANT_APPS` to support the current small codebase structure.
-- In a larger production design, tenant registry models are usually isolated into a dedicated shared app, while tenant business models live in tenant-only apps.
+- If no `Domain.domain` matches the hostname, `SHOW_PUBLIC_IF_NO_TENANT_FOUND=True` routes to the public schema URL set; otherwise the app returns `No tenant for hostname`.
+- Shared/public schema stores tenant registry data in `tenancy`.
+- Tenant schemas store tenant-scoped product and defect data in `defects`.
+- Public schema routes use `betatrax.public_urls`; tenant routes use `betatrax.urls`.
+- `SHOW_PUBLIC_IF_NO_TENANT_FOUND=True` lets allowed hosts without a tenant mapping use public routes for initial tenant registration.
 
 See `documents/tenant-usage.md` for operational commands and local testing steps.
 
@@ -522,8 +552,13 @@ Emails are triggered after lifecycle status transitions.
 `defects/migrations`:
 
 - `0001_initial.py`: core product, developer, defect, comment, history models.
-- `0002_tenant_model.py`: initial tenant model.
-- `0003_alter_tenant_schema_name_domain.py`: tenant mixin-compatible schema field and domain model.
+- `0002_tenant_model.py`: legacy tenant model from the first Sprint 3 tenant implementation.
+- `0003_alter_tenant_schema_name_domain.py`: legacy tenant domain model.
+- `0004_delete_domain_delete_tenant.py`: removes legacy tenant registry models from the tenant-scoped app.
+
+`tenancy/migrations`:
+
+- `0001_initial.py`: current public-schema tenant and domain registry. It also copies data from legacy `defects_tenant` and `defects_domain` tables when upgrading an existing database.
 
 `frontend/migrations/0001_initial.py` exists but the `frontend` app has no active domain models.
 
@@ -581,6 +616,7 @@ Important variables:
 | `POSTGRES_HOST` | PostgreSQL host |
 | `POSTGRES_PORT` | PostgreSQL port |
 | `ENABLE_DJANGO_TENANTS` | Enables django-tenants mode |
+| `SHOW_PUBLIC_IF_NO_TENANT_FOUND` | Uses public URL routes when an allowed host has no tenant domain |
 | `AUTO_MIGRATE` | Runs migration on container startup |
 | `DATABASE_WAIT_TIMEOUT` | Database wait timeout in seconds |
 | `EMAIL_ENABLED` | Enables SMTP email |
@@ -731,7 +767,6 @@ sequenceDiagram
 - `SECRET_KEY` has a hardcoded fallback in `settings.py`; production should read it from environment.
 - `DEBUG=True` is convenient locally but should be false in production.
 - `runserver` is used in Docker; production deployments normally use a WSGI/ASGI server such as Gunicorn or Uvicorn.
-- The tenant registry and business models currently live in the same `defects` app. This is workable for the project but less clean than separating shared tenant registry models from tenant-scoped business models.
 - User references in business models are stored as strings, not foreign keys to Django `User`; this simplifies seed/demo flows but weakens referential integrity.
 - Frontend pages call services directly instead of consuming the JSON API; this is acceptable for Django server-rendered apps, but API and UI behavior can still diverge at the controller/template level.
 - Duplicate action UI has a button but no frontend input for choosing a duplicate root report; the API/service supports `duplicate_of`.

@@ -7,12 +7,11 @@ from .services import register_product
 from .authz import actor_from_user
 from .models import DefectReport, Product
 from django.core.exceptions import ValidationError
-from .serializers import DefectActionSerializer, DefectCreateSerializer, TenantRegisterSerializer
+from .serializers import DefectActionSerializer, DefectCreateSerializer
 from .services import (
     STATUS_BY_SLUG,
     apply_action,
     create_defect,
-    register_tenant,
     serialize_defect_detail_for_api,
     serialize_defect_for_api,
     summarize_developer_effectiveness,
@@ -247,56 +246,6 @@ class DefectActionApi(APIView):
                 "report_id": defect.report_id,
                 "status": defect.status,
             }
-        )
-
-
-class TenantRegisterApi(APIView):
-    permission_classes = [IsAuthenticated]
-
-    @extend_schema(
-        summary="Register tenant",
-        description="Only platform admins can register tenants with schema_name and domain.",
-        request=TenantRegisterSerializer,
-        responses={201: {"type": "object"}, 400: {"type": "object"}, 403: {"type": "object"}},
-        examples=[
-            OpenApiExample(
-                "Register tenant example",
-                value={"schema_name": "team_a", "domain": "team-a.betatrax.local", "name": "Team A"},
-                request_only=True,
-            )
-        ],
-    )
-    def post(self, request):
-        actor = actor_from_user(request.user)
-        if not actor.is_platform_admin:
-            return Response({"error": "Only platform admins can register tenants."}, status=status.HTTP_403_FORBIDDEN)
-
-        serializer = TenantRegisterSerializer(data=request.data)
-        if not serializer.is_valid():
-            return Response({"error": serializer.errors}, status=status.HTTP_400_BAD_REQUEST)
-
-        payload = serializer.validated_data
-        try:
-            tenant = register_tenant(
-                schema_name=payload.get("schema_name", ""),
-                domain=payload.get("domain", ""),
-                name=payload.get("name", ""),
-            )
-        except ValidationError as exc:
-            detail = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
-            return Response({"error": detail}, status=status.HTTP_400_BAD_REQUEST)
-
-        return Response(
-            {
-                "message": "Tenant registered successfully.",
-                "tenant": {
-                    "schema_name": tenant.schema_name,
-                    "domain": tenant.domain,
-                    "name": tenant.name,
-                    "is_active": tenant.is_active,
-                },
-            },
-            status=status.HTTP_201_CREATED,
         )
 
 

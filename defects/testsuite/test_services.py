@@ -6,7 +6,7 @@ from django.test import TestCase
 from unittest.mock import patch
 
 from defects.authz import ActorContext, ROLE_DEVELOPER, ROLE_OWNER, actor_from_user
-from defects.models import DefectComment, DefectReport, DefectStatus, Domain, Product, ProductDeveloper, Tenant
+from defects.models import DefectComment, DefectReport, DefectStatus, Product, ProductDeveloper
 from defects.services import (
     _demo_dt,
     _iter_duplicate_descendants,
@@ -15,10 +15,11 @@ from defects.services import (
     create_defect,
     ensure_demo_seed,
     next_report_id,
-    register_tenant,
     register_product,
     summarize_developer_effectiveness,
 )
+from tenancy.models import Domain, Tenant
+from tenancy.services import register_tenant
 
 
 class DefectServiceTests(TestCase):

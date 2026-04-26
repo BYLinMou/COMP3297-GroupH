@@ -19,6 +19,7 @@ There are two layers:
 
 - Public/shared schema: stores tenant registry data, including `Tenant` and `Domain`.
 - Tenant schema: stores the application data for one tenant.
+- Code location: tenant registry models live in `tenancy`; product and defect models live in `defects`.
 
 The browser does not choose a tenant by login first. It chooses a tenant by hostname.
 
@@ -28,13 +29,15 @@ Examples:
 - `http://team-a.localhost:8000/` looks for a `Domain` row with `domain="team-a.localhost"`.
 - `https://team-a.example.com/` looks for a `Domain` row with `domain="team-a.example.com"`.
 
-If no matching `Domain` exists, Django shows:
+If no matching `Domain` exists and `SHOW_PUBLIC_IF_NO_TENANT_FOUND=False`, Django shows:
 
 ```text
 No tenant for hostname "..."
 ```
 
 That means the server is running, but the hostname is not mapped to a tenant.
+
+If `SHOW_PUBLIC_IF_NO_TENANT_FOUND=True`, an allowed hostname without a tenant mapping uses the public schema URL set instead. That public URL set exposes platform admin and tenant registration, not tenant business pages.
 
 ## Local .env
 
@@ -52,6 +55,7 @@ POSTGRES_PORT=5432
 
 AUTO_MIGRATE=True
 DATABASE_WAIT_TIMEOUT=60
+SHOW_PUBLIC_IF_NO_TENANT_FOUND=True
 ```
 
 If you only want normal single-database mode, set:
@@ -70,7 +74,7 @@ Run:
 C:\Users\User\.conda\envs\betatrax\python.exe manage.py migrate_schemas --shared --noinput
 ```
 
-This creates the public/shared tables, including the tables used to store tenants and domains.
+This creates the public/shared tables, including `tenancy_tenant` and `tenancy_domain`.
 
 If you are using Docker with the project entrypoint and `AUTO_MIGRATE=True`, the container runs this automatically when `ENABLE_DJANGO_TENANTS=True`.
 
@@ -79,12 +83,12 @@ If you are using Docker with the project entrypoint and `AUTO_MIGRATE=True`, the
 After shared migrations, create a tenant for local browser access:
 
 ```powershell
-C:\Users\User\.conda\envs\betatrax\python.exe manage.py shell -c "from defects.models import Tenant, Domain; t, _ = Tenant.objects.get_or_create(schema_name='local', defaults={'domain':'127.0.0.1','name':'Local Tenant'}); Domain.objects.get_or_create(domain='127.0.0.1', defaults={'tenant':t,'is_primary':True}); print('ok')"
+C:\Users\User\.conda\envs\betatrax\python.exe manage.py shell -c "from tenancy.models import Tenant, Domain; t, _ = Tenant.objects.get_or_create(schema_name='local', defaults={'domain':'127.0.0.1','name':'Local Company'}); Domain.objects.get_or_create(domain='127.0.0.1', defaults={'tenant':t,'is_primary':True}); print('ok')"
 ```
 
 This creates:
 
-- A tenant named `local`
+- A tenant/company named `local`
 - A domain mapping `127.0.0.1 -> local`
 - A PostgreSQL schema named `local`
 - The tenant schema tables, because `Tenant.auto_create_schema=True`
@@ -106,13 +110,13 @@ http://127.0.0.1:8000/
 Create tenant A:
 
 ```powershell
-C:\Users\User\.conda\envs\betatrax\python.exe manage.py shell -c "from defects.models import Tenant, Domain; t, _ = Tenant.objects.get_or_create(schema_name='team_a', defaults={'domain':'team-a.localhost','name':'Team A'}); Domain.objects.get_or_create(domain='team-a.localhost', defaults={'tenant':t,'is_primary':True}); print('ok')"
+C:\Users\User\.conda\envs\betatrax\python.exe manage.py shell -c "from tenancy.models import Tenant, Domain; t, _ = Tenant.objects.get_or_create(schema_name='team_a', defaults={'domain':'team-a.localhost','name':'Team A'}); Domain.objects.get_or_create(domain='team-a.localhost', defaults={'tenant':t,'is_primary':True}); print('ok')"
 ```
 
 Create tenant B:
 
 ```powershell
-C:\Users\User\.conda\envs\betatrax\python.exe manage.py shell -c "from defects.models import Tenant, Domain; t, _ = Tenant.objects.get_or_create(schema_name='team_b', defaults={'domain':'team-b.localhost','name':'Team B'}); Domain.objects.get_or_create(domain='team-b.localhost', defaults={'tenant':t,'is_primary':True}); print('ok')"
+C:\Users\User\.conda\envs\betatrax\python.exe manage.py shell -c "from tenancy.models import Tenant, Domain; t, _ = Tenant.objects.get_or_create(schema_name='team_b', defaults={'domain':'team-b.localhost','name':'Team B'}); Domain.objects.get_or_create(domain='team-b.localhost', defaults={'tenant':t,'is_primary':True}); print('ok')"
 ```
 
 On Windows, edit the hosts file as Administrator:
@@ -161,12 +165,21 @@ http://127.0.0.1:8000/
 
 This is why tenant mode can feel confusing: login is not the first selector. The hostname selects the tenant first, then normal login/auth happens inside that tenant context.
 
+## Admin Pages
+
+The admin model list depends on the current schema:
+
+- Public schema: shows platform/shared models such as `Tenant` and `Domain`.
+- Tenant schema such as `local`, `team_a`, or `team_b`: shows tenant business models such as `Product`, `DefectReport`, comments, and status history.
+
+If you open `/admin/` through `http://127.0.0.1:8000/` and `127.0.0.1` is mapped to the `local` tenant, you are inside the `local` company schema. In that context, `Tenant` and `Domain` should not appear.
+
 ## Check Current Tenants
 
 Run:
 
 ```powershell
-C:\Users\User\.conda\envs\betatrax\python.exe manage.py shell -c "from defects.models import Tenant, Domain; print('tenants', list(Tenant.objects.values_list('schema_name','domain'))); print('domains', list(Domain.objects.values_list('domain','tenant__schema_name','is_primary')))"
+C:\Users\User\.conda\envs\betatrax\python.exe manage.py shell -c "from tenancy.models import Tenant, Domain; print('tenants', list(Tenant.objects.values_list('schema_name','domain'))); print('domains', list(Domain.objects.values_list('domain','tenant__schema_name','is_primary')))"
 ```
 
 Expected example:
@@ -234,7 +247,7 @@ The server is running, but no `Domain` row matches `127.0.0.1`.
 Fix:
 
 ```powershell
-C:\Users\User\.conda\envs\betatrax\python.exe manage.py shell -c "from defects.models import Tenant, Domain; t, _ = Tenant.objects.get_or_create(schema_name='local', defaults={'domain':'127.0.0.1','name':'Local Tenant'}); Domain.objects.get_or_create(domain='127.0.0.1', defaults={'tenant':t,'is_primary':True}); print('ok')"
+C:\Users\User\.conda\envs\betatrax\python.exe manage.py shell -c "from tenancy.models import Tenant, Domain; t, _ = Tenant.objects.get_or_create(schema_name='local', defaults={'domain':'127.0.0.1','name':'Local Company'}); Domain.objects.get_or_create(domain='127.0.0.1', defaults={'tenant':t,'is_primary':True}); print('ok')"
 ```
 
 ### ENABLE_DJANGO_TENANTS=True requires DATABASE_ENGINE=postgresql
@@ -280,4 +293,3 @@ http://127.0.0.1:8000/
 ```
 
 unless you also create a `Domain` row for `127.0.0.1`.
-

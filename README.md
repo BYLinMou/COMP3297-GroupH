@@ -4,15 +4,26 @@ BetaTrax is a lightweight defect tracking system built for the COMP3297 software
 It supports the core bug lifecycle from **New -> Open -> Assigned -> Fixed -> Resolved**.
 The current implementation is built on a Django-based architecture (see the `betatrax/` project module).
 
+## Project Documents
+
+Start here for deeper project details:
+
+- [System architecture](documents/system-architecture.md)
+- [Automated testing](documents/automated-testing.md)
+- [Tenant usage](documents/tenant-usage.md)
+
 ## Demo Website
 
-- Demo website: [betatrax.zeabur.app](https://betatrax.zeabur.app)
-- Demo website 2 (backup): [betatrax.yeelam.site](https://betatrax.yeelam.site)
+- Demo website (public schema): [betatrax.zeabur.app](https://betatrax.zeabur.app)
+- Demo website (public schema) 2 (backup): [betatrax.yeelam.site](https://betatrax.yeelam.site)
 - Admin account: `user`
 - Admin password: `testtest`
 - We recommend using the demo website first because SMTP is already configured there and it is easier to use for evaluation.
 
 ## Workflows
+
+<details>
+<summary><strong>GitHub Actions workflows</strong></summary>
 
 This repository currently uses three GitHub Actions workflows:
 
@@ -44,7 +55,13 @@ It can also be triggered manually with an optional `image_tag` input (for exampl
 By default, image version tag is read from the `VERSION` file. Automatic runs also update `latest`.
 The published image path is `ghcr.io/<owner>/<repo>`.
 
-## Docker Deployment
+</details>
+
+## Deployment
+
+<details>
+<summary><strong>Docker Deployment</strong></summary>
+
 We recommend using Docker container setup for an isolated and consistent environment.
 
 Use the published image:
@@ -97,7 +114,10 @@ python manage.py migrate --noinput
 
 Set `AUTO_MIGRATE=False` only if migrations are handled outside the container.
 
-## Local Development
+</details>
+
+<details>
+<summary><strong>Local Deployment</strong></summary>
 
 ```bash
 # Create and activate conda environment
@@ -170,6 +190,8 @@ one manually with `python manage.py createsuperuser`, then use that account to
 sign in to `/platform/tenants/`. The tenant console creates tenant-scoped admin
 accounts when creating new tenants.
 
+</details>
+
 ## Automated Testing
 
 Sprint 3 testing now uses Django's built-in test runner, Django REST Framework test utilities, and `coverage.py`.
@@ -189,7 +211,8 @@ Sprint 3 testing now uses Django's built-in test runner, Django REST Framework t
 - `frontend/tests.py`
   Smoke tests for key HTML flows
 
-### Local commands
+<details>
+<summary><strong>Local commands</strong></summary>
 
 Run the full discovered suite:
 
@@ -244,7 +267,291 @@ Generated artifacts are:
 
 For implementation details and conventions, see [documents/automated-testing.md](documents/automated-testing.md).
 
-## API (Sprint 2)
+</details>
+
+## API
+
+<details>
+<summary><strong>API (Sprint 3)</strong></summary>
+
+Base paths:
+
+- Defect actions: `/api/defects/<defect_id>/actions/`
+- Tenant registration: `/api/tenants/register/`
+- Developer metric: `/api/developers/{developer_id}/effectiveness/`
+
+Testing commands are provided in the Automated Testing section above.
+
+### 1) Reject defect report
+
+- Method: `POST`
+- Path: `/api/defects/<defect_id>/actions/`
+- Content-Type: `application/json`
+- Auth: required (`Session` or `Basic`)
+- Role: Product Owner only
+- Valid current status: `New`
+
+Request example:
+
+```json
+{
+  "action": "reject"
+}
+```
+
+Response `200`:
+
+```json
+{
+  "message": "Defect moved to Rejected.",
+  "report_id": "BT-RP-1002",
+  "status": "Rejected"
+}
+```
+
+Responses:
+- `200` rejected successfully
+- `400` invalid transition or invalid role/user
+- `403` unauthenticated account
+- `404` defect not found
+
+### 2) Mark duplicate defect report
+
+- Method: `POST`
+- Path: `/api/defects/<defect_id>/actions/`
+- Content-Type: `application/json`
+- Auth: required (`Session` or `Basic`)
+- Role: Product Owner only
+- Valid current status: `New`
+- Optional fields:
+  - `duplicate_of` (existing root or parent `report_id`)
+
+Request example:
+
+```json
+{
+  "action": "duplicate",
+  "duplicate_of": "BT-RP-1001"
+}
+```
+
+Response `200`:
+
+```json
+{
+  "message": "Defect moved to Duplicate.",
+  "report_id": "BT-RP-1002",
+  "status": "Duplicate"
+}
+```
+
+Responses:
+- `200` marked duplicate successfully
+- `400` invalid transition, invalid role/user, or unknown `duplicate_of`
+- `403` unauthenticated account
+- `404` defect not found
+
+When `duplicate_of` is supplied, the report is linked to the selected parent/root defect.
+
+### 3) Mark cannot reproduce
+
+- Method: `POST`
+- Path: `/api/defects/<defect_id>/actions/`
+- Content-Type: `application/json`
+- Auth: required (`Session` or `Basic`)
+- Role: assigned Developer only
+- Valid current status: `Assigned`
+- Optional fields:
+  - `fix_note`
+
+Request example:
+
+```json
+{
+  "action": "cannot_reproduce",
+  "fix_note": "Cannot reproduce on local build 1.0.2."
+}
+```
+
+Response `200`:
+
+```json
+{
+  "message": "Defect moved to Cannot Reproduce.",
+  "report_id": "BT-RP-1002",
+  "status": "Cannot Reproduce"
+}
+```
+
+Responses:
+- `200` updated successfully
+- `400` invalid transition, invalid role/user, or unassigned developer
+- `403` unauthenticated account
+- `404` defect not found
+
+### 4) Reopen defect report
+
+- Method: `POST`
+- Path: `/api/defects/<defect_id>/actions/`
+- Content-Type: `application/json`
+- Auth: required (`Session` or `Basic`)
+- Role: Product Owner only
+- Valid current status: `Fixed`
+- Optional fields:
+  - `retest_note`
+
+Request example:
+
+```json
+{
+  "action": "reopen",
+  "retest_note": "Issue still appears after retest."
+}
+```
+
+Response `200`:
+
+```json
+{
+  "message": "Defect moved to Reopened.",
+  "report_id": "BT-RP-1002",
+  "status": "Reopened"
+}
+```
+
+Responses:
+- `200` reopened successfully
+- `400` invalid transition or invalid role/user
+- `403` unauthenticated account
+- `404` defect not found
+
+### 5) Add comment
+
+- Method: `POST`
+- Path: `/api/defects/<defect_id>/actions/`
+- Content-Type: `application/json`
+- Auth: required (`Session` or `Basic`)
+- Role: Product Owner or Developer
+- Required fields:
+  - `comment`
+
+Request example:
+
+```json
+{
+  "action": "add_comment",
+  "comment": "Please attach browser and OS details."
+}
+```
+
+Response `200`:
+
+```json
+{
+  "message": "Comment added.",
+  "report_id": "BT-RP-1002",
+  "status": "New"
+}
+```
+
+Responses:
+- `200` comment stored with author identity and timestamp
+- `400` empty comment or invalid role/user
+- `403` unauthenticated account
+- `404` defect not found
+
+### 6) Register tenant
+
+- Method: `POST`
+- Path: `/api/tenants/register/`
+- Content-Type: `application/json`
+- Auth: required (`Session` or `Basic`)
+- Role: Platform Admin only (superuser or `platform_admin` group)
+- Schema: public schema only
+
+Request example:
+
+```json
+{
+  "schema_name": "team_a",
+  "domain": "team-a.example.com",
+  "name": "Team A"
+}
+```
+
+Response `201`:
+
+```json
+{
+  "message": "Tenant registered successfully.",
+  "tenant": {
+    "schema_name": "team_a",
+    "domain": "team-a.example.com",
+    "name": "Team A",
+    "is_active": true
+  }
+}
+```
+
+Responses:
+- `201` tenant created
+- `400` validation failure
+- `403` non-platform-admin account
+- `404` called from a tenant schema when tenant mode is enabled
+
+In tenant mode, successful registration creates the tenant row, a primary
+`Domain` row in the public schema, and the PostgreSQL schema for that tenant.
+
+### 7) Developer effectiveness metric
+
+- Method: `GET`
+- Path: `/api/developers/{developer_id}/effectiveness/`
+- Auth: required (`Session` or `Basic`)
+- Role: Product Owner only
+
+Response example:
+
+```json
+{
+  "developer_id": "dev-001",
+  "fixed": 36,
+  "reopened": 2,
+  "reopen_ratio": 0.05555555555555555,
+  "classification": "Fair"
+}
+```
+
+Classification rules:
+- `fixed < 20` -> `Insufficient data`
+- `reopened / fixed < 1/32` -> `Good`
+- `1/32 <= reopened / fixed < 1/8` -> `Fair`
+- `reopened / fixed >= 1/8` -> `Poor`
+
+Responses:
+- `200` metric returned
+- `400` developer is not in the current Product Owner's team
+- `403` non-owner account
+
+### 8) Duplicate chain email notification
+
+This behavior is automatic when status-changing defect actions are applied.
+
+When the root defect of a duplicate chain changes status, the system now:
+
+- Finds all linked duplicate reports recursively
+- Sends notification emails to testers of linked duplicates (only when those reports store tester email)
+
+### 9) API documentation
+
+When `drf-spectacular` is available, generated API docs are exposed at:
+
+- OpenAPI schema: `/api/schema/`
+- Swagger UI: `/api/docs/`
+
+</details>
+
+<details>
+<summary><strong>API (Sprint 2)</strong></summary>
 
 Testing commands are provided in [testcasecommand.txt](documents/testcasecommand.txt) (using demo website 2).
 
@@ -270,73 +577,10 @@ Responses:
 - `400` validation failure (duplicate product, owner already has a product, invalid developer, etc.)
 - `403` non-owner account
 
-## API (Sprint 3)
+</details>
 
-### 1) Register tenant
-
-- Method: `POST`
-- Path: `/api/tenants/register/`
-- Auth: required (`Session` or `Basic`)
-- Role: Platform Admin only (superuser or `platform_admin` group)
-
-Request example:
-
-```json
-{
-  "schema_name": "team_a",
-  "domain": "team-a.example.com",
-  "name": "Team A"
-}
-```
-
-Responses:
-- `201` created
-- `400` validation failure
-- `403` non-platform-admin account
-
-In tenant mode, successful registration creates the tenant row, a primary
-`Domain` row in the public schema, and the PostgreSQL schema for that tenant.
-
-### 2) Developer effectiveness metric
-
-- Method: `GET`
-- Path: `/api/developers/{developer_id}/effectiveness/`
-- Auth: required (`Session` or `Basic`)
-- Role: Product Owner only
-
-Response example:
-
-```json
-{
-  "developer_id": "dev-001",
-  "fixed": 36,
-  "reopened": 2,
-  "reopen_ratio": 0.05555555555555555,
-  "classification": "Fair"
-}
-```
-
-Classification rules:
-- `fixed < 20` -> `Insufficient data`
-- `reopened / fixed < 1/32` -> `Good`
-- `1/32 <= reopened / fixed < 1/8` -> `Fair`
-- `reopened / fixed >= 1/8` -> `Poor`
-
-### 3) Duplicate chain email notification
-
-When the root defect of a duplicate chain changes status, the system now:
-
-- Finds all linked duplicate reports recursively
-- Sends notification emails to testers of linked duplicates (only when those reports store tester email)
-
-### 4) API documentation
-
-When `drf-spectacular` is available, generated API docs are exposed at:
-
-- OpenAPI schema: `/api/schema/`
-- Swagger UI: `/api/docs/`
-
-## API (Sprint 1)
+<details>
+<summary><strong>API (Sprint 1)</strong></summary>
 
 Base path: `/api/defects/`
 
@@ -452,6 +696,8 @@ Error responses:
 - `404` defect not found
 - `403` unauthenticated or unauthorized access
 
+</details>
+
 ## Demo Accounts (Auto-created)
 
 In normal single-database mode, and inside tenant schemas, the system auto-creates
@@ -503,7 +749,8 @@ If you want to enable notification emails, configure these in `.env`:
 
 For Google accounts, use a Google App Password (16 characters) instead of your login password.
 
-## Sprint 1 Limitations
+<details>
+<summary><strong>Sprint 1 Limitations</strong></summary>
 
 The following limitations are present in this Sprint 1 executable:
 
@@ -525,6 +772,8 @@ The following limitations are present in this Sprint 1 executable:
     No self-service signup/password reset is provided (Only available through admin console).
 
 6. UI is a Sprint 1 MVP and does not cover all future lifecycle paths from full use-case set.
+
+</details>
 
 ## License
 

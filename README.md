@@ -133,7 +133,7 @@ Set these variables in `.env` when using PostgreSQL:
 Optional tenant middleware wiring can be enabled with:
 
 - `ENABLE_DJANGO_TENANTS=True`
-- `PUBLIC_SCHEMA_DOMAINS=platform.example.com`
+- `PUBLIC_SCHEMA_DOMAINS=platform.example.com,admin.example.com`
 
 When tenant mode is enabled, BetaTrax configures `SHARED_APPS`, `TENANT_APPS`,
 `TENANT_MODEL=tenancy.Tenant`, `TENANT_DOMAIN_MODEL=tenancy.Domain`, and the
@@ -155,13 +155,14 @@ By default, this flag is disabled to keep local/CI setup simple. Use normal
 starting through Docker.
 
 Use `PUBLIC_SCHEMA_DOMAINS` for platform/admin hostnames that should always use
-the public schema. Do not create `Domain` rows for those hostnames. Public routes
-expose `/platform/tenants/`, `/admin/`, tenant registration, and API docs only;
-product and defect routes are tenant-scoped.
+the public schema. Multiple hostnames are comma-separated. Do not create `Domain`
+rows for those hostnames. Public routes expose `/platform/tenants/`, `/admin/`,
+tenant registration, and API docs only; product and defect routes are tenant-scoped.
 
 Example deployment split:
 
 - `platform.example.com` -> public schema tenant console
+- `admin.example.com` -> public schema tenant console/admin alias
 - `company-a.example.com` -> tenant schema selected by a `Domain` row
 
 Startup migrations do not create a public platform superuser automatically. Create
@@ -453,7 +454,8 @@ Error responses:
 
 ## Demo Accounts (Auto-created)
 
-The system auto-creates Sprint 1 demo users and roles:
+In normal single-database mode, and inside tenant schemas, the system auto-creates
+Sprint 1 demo users and roles:
 
 - Product Owner: `owner-001`
 - Developers: `dev-001`, `dev-004`
@@ -463,8 +465,11 @@ Use `/auth/` for sign in, then access owner/developer screens.
 
 ## Initial Demo Data (Auto-seeded)
 
-After running `python manage.py migrate`, the app seeds initial data on first use
-(for example when opening `/`, `/auth/`, or any defects API endpoint).
+After running `python manage.py migrate` in normal single-database mode, the app
+seeds initial data on first use (for example when opening `/`, `/auth/`, or any
+defects API endpoint). In tenant mode, shared/public migrations skip this business
+demo seed; Product Owner and Developer demo identities belong in tenant schemas,
+not in the public schema.
 
 Seeded records include:
 

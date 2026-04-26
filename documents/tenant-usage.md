@@ -49,7 +49,7 @@ ENABLE_DJANGO_TENANTS=True
 
 AUTO_MIGRATE=True
 DATABASE_WAIT_TIMEOUT=60
-PUBLIC_SCHEMA_DOMAINS=platform.localhost
+PUBLIC_SCHEMA_DOMAINS=platform.localhost,admin.localhost
 SHOW_PUBLIC_IF_NO_TENANT_FOUND=True
 ```
 
@@ -59,7 +59,8 @@ If you only want normal single-database mode, set:
 ENABLE_DJANGO_TENANTS=False
 ```
 
-`PUBLIC_SCHEMA_DOMAINS` is the public/platform entrypoint. Do not create a `Domain` row for that hostname.
+`PUBLIC_SCHEMA_DOMAINS` is the public/platform entrypoint. It accepts multiple
+comma-separated hostnames. Do not create `Domain` rows for those hostnames.
 
 ## Initialize An Empty Database
 
@@ -197,15 +198,18 @@ For local testing, add this to the Windows hosts file if needed:
 
 ```text
 127.0.0.1 platform.localhost
+127.0.0.1 admin.localhost
 ```
 
-Then make sure `platform.localhost` is in `.env`:
+Then make sure the public hostnames are in `.env`:
 
 ```env
-PUBLIC_SCHEMA_DOMAINS=platform.localhost
+PUBLIC_SCHEMA_DOMAINS=platform.localhost,admin.localhost
 ```
 
-Do not add `platform.localhost` to `tenancy.Domain`. Tenant domains are for company entrypoints such as `team-a.localhost`; public domains are for platform administration.
+Do not add `platform.localhost` or `admin.localhost` to `tenancy.Domain`. Tenant
+domains are for company entrypoints such as `team-a.localhost`; public domains
+are for platform administration.
 
 ## Public And Tenant Admin Accounts
 
@@ -222,6 +226,11 @@ http://platform.localhost:8000/platform/login/
 ```
 
 When you create a tenant in `/platform/tenants/`, the form also asks for a tenant admin username, email, and password. That account is created inside the tenant schema, not public schema.
+
+The public schema should contain platform/shared identities only, such as a
+manual superuser or users in the `platform_admin` group. Product Owner and
+Developer demo accounts such as `owner-001` and `dev-001` are business identities
+for normal single-database mode or tenant schemas, not public-schema seed data.
 
 Example:
 

@@ -32,9 +32,6 @@ COMP3297-GroupH/
 +-- defects/
 |   +-- migrations/
 |   |   +-- 0001_initial.py
-|   |   +-- 0002_tenant_model.py
-|   |   +-- 0003_alter_tenant_schema_name_domain.py
-|   |   +-- 0004_delete_domain_delete_tenant.py
 |   |   +-- __init__.py
 |   +-- testsuite/
 |   |   +-- __init__.py
@@ -580,14 +577,11 @@ Emails are triggered after lifecycle status transitions.
 
 `defects/migrations`:
 
-- `0001_initial.py`: core product, developer, defect, comment, history models.
-- `0002_tenant_model.py`: legacy tenant model from the first Sprint 3 tenant implementation.
-- `0003_alter_tenant_schema_name_domain.py`: legacy tenant domain model.
-- `0004_delete_domain_delete_tenant.py`: removes legacy tenant registry models from the tenant-scoped app.
+- `0001_initial.py`: tenant-scoped product, developer assignment, defect, comment, and history models.
 
 `tenancy/migrations`:
 
-- `0001_initial.py`: current public-schema tenant and domain registry. It also copies data from legacy `defects_tenant` and `defects_domain` tables when upgrading an existing database.
+- `0001_initial.py`: public-schema tenant and domain registry.
 
 `frontend/migrations/0001_initial.py` exists but the `frontend` app has no active domain models.
 

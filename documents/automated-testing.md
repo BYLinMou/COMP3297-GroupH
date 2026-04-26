@@ -25,7 +25,7 @@ CI uploads `coverage.xml` and `htmlcov/` as the `coverage-report` artifact.
 - `defects/tests.py`: compatibility entrypoint that re-exports the Sprint 3 defect test suite for CI and explicit test labels
 - `defects/testsuite/test_api_client.py`: endpoint-level integration tests using `APITestCase` and `APIClient`
 - `defects/testsuite/test_views_request_factory.py`: direct view tests using `APIRequestFactory`
-- `defects/testsuite/test_services.py`: unit-style service tests for transition logic and product registration rules
+- `defects/testsuite/test_services.py`: unit-style service tests for transition logic, registration rules, and tenant public-schema seed guards
 - `defects/testsuite/test_effectiveness.py`: branch-focused tests for `classify_developer(fixed, reopened)`
 - `frontend/tests.py`: smoke tests for key HTML flows
 

@@ -14,6 +14,8 @@ import os
 import importlib.util
 from pathlib import Path
 
+from django.core.exceptions import ImproperlyConfigured
+
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -185,11 +187,13 @@ else:
     DATABASES = {
         'default': {
             'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': Path(os.getenv("SQLITE_PATH", str(BASE_DIR / 'db.sqlite3'))),
+            'NAME': str(Path(os.getenv("SQLITE_PATH", str(BASE_DIR / 'db.sqlite3')))),
         }
     }
 
 if USE_DJANGO_TENANTS:
+    if DATABASE_ENGINE != "postgresql":
+        raise ImproperlyConfigured("ENABLE_DJANGO_TENANTS=True requires DATABASE_ENGINE=postgresql.")
     DATABASES['default']['ENGINE'] = 'django_tenants.postgresql_backend'
     DATABASE_ROUTERS = ('django_tenants.routers.TenantSyncRouter',)
 

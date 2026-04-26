@@ -142,6 +142,43 @@ python manage.py runserver
 
 The app will be available at `http://127.0.0.1:8000/`.
 
+### Local PostgreSQL (Docker)
+
+If you want to run locally with PostgreSQL (required for `django-tenants`), start a local Postgres container:
+
+```bash
+docker run --name betatrax-postgres \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=betatrax \
+  -p 5432:5432 \
+  -v "$(pwd)/data/pgdata:/var/lib/postgresql/data" \
+  -d postgres:16
+```
+
+PowerShell equivalent:
+
+```powershell
+docker run --name betatrax-postgres `
+  -e POSTGRES_USER=postgres `
+  -e POSTGRES_PASSWORD=postgres `
+  -e POSTGRES_DB=betatrax `
+  -p 5432:5432 `
+  -v "${PWD}\\data\\pgdata:/var/lib/postgresql/data" `
+  -d postgres:16
+```
+
+Then configure `.env`:
+
+- `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/betatrax`
+- `ENABLE_DJANGO_TENANTS=True` (optional; required for schema-based tenant isolation)
+
+When `ENABLE_DJANGO_TENANTS=True`, apply shared/public migrations with:
+
+```bash
+python manage.py migrate_schemas --shared
+```
+
 ### PostgreSQL + Tenant Ready Config (Sprint 3)
 
 Sprint 3 adds PostgreSQL-ready configuration and tenant registration API.

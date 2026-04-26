@@ -13,6 +13,7 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 import os
 import importlib.util
 from pathlib import Path
+from urllib.parse import parse_qsl, unquote, urlparse
 
 from django.core.exceptions import ImproperlyConfigured
 
@@ -179,10 +180,67 @@ WSGI_APPLICATION = 'betatrax.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASE_ENGINE = os.getenv("DATABASE_ENGINE", "sqlite").strip().lower()
-if DATABASE_ENGINE == "postgresql":
-    DATABASES = {
-        'default': {
+def _sqlite_path_from_database_url(raw_path: str) -> str:
+    path = unquote(raw_path)
+    if path in {"", "/"}:
+        raise ImproperlyConfigured("SQLite DATABASE_URL must include a database path.")
+    if path == "/:memory:":
+        return ":memory:"
+    if path.startswith("//"):
+        return path[1:]
+    if path.startswith("/./") or path.startswith("/../"):
+        return path[1:]
+    if path.count("/") == 1:
+        return path.lstrip("/")
+    return path
+
+
+def _database_config_from_url(database_url: str) -> tuple[str, dict]:
+    parsed = urlparse(database_url)
+    scheme = parsed.scheme.strip().lower()
+
+    if scheme in {"postgres", "postgresql"}:
+        database_name = unquote(parsed.path.lstrip("/"))
+        if not database_name:
+            raise ImproperlyConfigured("PostgreSQL DATABASE_URL must include a database name.")
+
+        try:
+            port = parsed.port
+        except ValueError as exc:
+            raise ImproperlyConfigured("DATABASE_URL contains an invalid port.") from exc
+
+        config = {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': database_name,
+            'USER': unquote(parsed.username or ''),
+            'PASSWORD': unquote(parsed.password or ''),
+            'HOST': parsed.hostname or '',
+            'PORT': str(port) if port is not None else '',
+        }
+        options = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        if options:
+            config['OPTIONS'] = options
+        return "postgresql", config
+
+    if scheme in {"sqlite", "sqlite3"}:
+        if parsed.netloc:
+            raise ImproperlyConfigured("SQLite DATABASE_URL must not include a host.")
+        return "sqlite", {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': _sqlite_path_from_database_url(parsed.path),
+        }
+
+    raise ImproperlyConfigured("DATABASE_URL must use sqlite, sqlite3, postgres, or postgresql.")
+
+
+def _database_config_from_env() -> tuple[str, dict]:
+    database_url = os.getenv("DATABASE_URL", "").strip()
+    if database_url:
+        return _database_config_from_url(database_url)
+
+    database_engine = os.getenv("DATABASE_ENGINE", "sqlite").strip().lower()
+    if database_engine == "postgresql":
+        return "postgresql", {
             'ENGINE': 'django.db.backends.postgresql',
             'NAME': os.getenv('POSTGRES_DB', 'betatrax'),
             'USER': os.getenv('POSTGRES_USER', 'postgres'),
@@ -190,18 +248,18 @@ if DATABASE_ENGINE == "postgresql":
             'HOST': os.getenv('POSTGRES_HOST', '127.0.0.1'),
             'PORT': os.getenv('POSTGRES_PORT', '5432'),
         }
+    return "sqlite", {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': str(Path(os.getenv("SQLITE_PATH", str(BASE_DIR / 'db.sqlite3')))),
     }
-else:
-    DATABASES = {
-        'default': {
-            'ENGINE': 'django.db.backends.sqlite3',
-            'NAME': str(Path(os.getenv("SQLITE_PATH", str(BASE_DIR / 'db.sqlite3')))),
-        }
-    }
+
+
+DATABASE_ENGINE, DEFAULT_DATABASE_CONFIG = _database_config_from_env()
+DATABASES = {'default': DEFAULT_DATABASE_CONFIG}
 
 if USE_DJANGO_TENANTS:
     if DATABASE_ENGINE != "postgresql":
-        raise ImproperlyConfigured("ENABLE_DJANGO_TENANTS=True requires DATABASE_ENGINE=postgresql.")
+        raise ImproperlyConfigured("ENABLE_DJANGO_TENANTS=True requires a PostgreSQL DATABASE_URL.")
     DATABASES['default']['ENGINE'] = 'django_tenants.postgresql_backend'
     DATABASE_ROUTERS = ('django_tenants.routers.TenantSyncRouter',)
 

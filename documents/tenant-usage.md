@@ -6,7 +6,7 @@ Tenant mode is enabled by:
 
 ```env
 ENABLE_DJANGO_TENANTS=True
-DATABASE_ENGINE=postgresql
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/betatrax
 ```
 
 Do not use tenant mode with SQLite. `django-tenants` requires PostgreSQL schemas.
@@ -44,14 +44,8 @@ If the hostname is listed in `PUBLIC_SCHEMA_DOMAINS`, it uses the public schema 
 Use PostgreSQL and tenant mode:
 
 ```env
-DATABASE_ENGINE=postgresql
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/betatrax
 ENABLE_DJANGO_TENANTS=True
-
-POSTGRES_DB=betatrax
-POSTGRES_USER=postgres
-POSTGRES_PASSWORD=postgres
-POSTGRES_HOST=127.0.0.1
-POSTGRES_PORT=5432
 
 AUTO_MIGRATE=True
 DATABASE_WAIT_TIMEOUT=60
@@ -311,14 +305,14 @@ Fix:
 C:\Users\User\.conda\envs\betatrax\python.exe manage.py shell -c "from tenancy.models import Tenant, Domain; t, _ = Tenant.objects.get_or_create(schema_name='local', defaults={'domain':'127.0.0.1','name':'Local Company'}); Domain.objects.get_or_create(domain='127.0.0.1', defaults={'tenant':t,'is_primary':True}); print('ok')"
 ```
 
-### ENABLE_DJANGO_TENANTS=True requires DATABASE_ENGINE=postgresql
+### ENABLE_DJANGO_TENANTS=True requires a PostgreSQL DATABASE_URL
 
 Tenant mode is enabled, but the app is not configured to use PostgreSQL.
 
 Fix `.env`:
 
 ```env
-DATABASE_ENGINE=postgresql
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/betatrax
 ENABLE_DJANGO_TENANTS=True
 ```
 

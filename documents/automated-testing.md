@@ -92,7 +92,7 @@ Run a tenant-mode configuration check against PostgreSQL:
 
 ```powershell
 $env:ENABLE_DJANGO_TENANTS='True'
-$env:DATABASE_ENGINE='postgresql'
+$env:DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/betatrax'
 python manage.py check
 python manage.py migrate_schemas --shared --noinput
 ```

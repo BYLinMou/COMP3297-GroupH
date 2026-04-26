@@ -110,8 +110,7 @@ pip install -r requirements.txt
 # Copy environment config (edit as needed)
 cp .env.example .env
 
-# Set SQLITE_PATH=./data/db.sqlite3 in .env
-(Get-Content .env) -replace '^SQLITE_PATH=.*$', 'SQLITE_PATH=./data/db.sqlite3' | Set-Content .env
+# .env.example uses DATABASE_URL=sqlite:///./data/db.sqlite3
 mkdir data
 
 # Apply database migrations
@@ -129,12 +128,7 @@ Sprint 3 adds PostgreSQL-ready configuration and tenant registration API.
 
 Set these variables in `.env` when using PostgreSQL:
 
-- `DATABASE_ENGINE=postgresql`
-- `POSTGRES_DB=betatrax`
-- `POSTGRES_USER=postgres`
-- `POSTGRES_PASSWORD=postgres`
-- `POSTGRES_HOST=127.0.0.1`
-- `POSTGRES_PORT=5432`
+- `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/betatrax`
 
 Optional tenant middleware wiring can be enabled with:
 

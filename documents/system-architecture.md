@@ -175,11 +175,11 @@ Main runtime configuration:
 - Configures `INSTALLED_APPS`, middleware, database, static files, DRF, drf-spectacular, email.
 - Supports normal mode and tenant mode.
 - Normal mode:
-  - `DATABASE_ENGINE=sqlite` uses SQLite.
-  - `DATABASE_ENGINE=postgresql` uses normal Django PostgreSQL backend.
+  - `DATABASE_URL=sqlite:///./data/db.sqlite3` uses SQLite.
+  - `DATABASE_URL=postgresql://user:password@host:5432/dbname` uses normal Django PostgreSQL backend.
 - Tenant mode:
   - `ENABLE_DJANGO_TENANTS=True`
-  - requires `DATABASE_ENGINE=postgresql`
+  - requires a PostgreSQL `DATABASE_URL`
   - inserts `django_tenants.middleware.main.TenantMainMiddleware`
   - defines `SHARED_APPS`, `TENANT_APPS`, `TENANT_MODEL`, `TENANT_DOMAIN_MODEL`
   - switches engine to `django_tenants.postgresql_backend`
@@ -526,7 +526,7 @@ Tenant mode is optional and is controlled by:
 
 ```env
 ENABLE_DJANGO_TENANTS=True
-DATABASE_ENGINE=postgresql
+DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/betatrax
 ```
 
 When enabled:
@@ -639,13 +639,7 @@ Important variables:
 | `DJANGO_DEBUG` | Enables debug mode |
 | `DJANGO_ALLOWED_HOSTS` | Comma-separated allowed hosts |
 | `DJANGO_CSRF_TRUSTED_ORIGINS` | Comma-separated trusted origins |
-| `DATABASE_ENGINE` | `sqlite` or `postgresql` |
-| `SQLITE_PATH` | SQLite database path |
-| `POSTGRES_DB` | PostgreSQL database name |
-| `POSTGRES_USER` | PostgreSQL user |
-| `POSTGRES_PASSWORD` | PostgreSQL password |
-| `POSTGRES_HOST` | PostgreSQL host |
-| `POSTGRES_PORT` | PostgreSQL port |
+| `DATABASE_URL` | Database URI, for example `sqlite:///./data/db.sqlite3` or `postgresql://user:password@host:5432/dbname` |
 | `ENABLE_DJANGO_TENANTS` | Enables django-tenants mode |
 | `PUBLIC_SCHEMA_DOMAINS` | Comma-separated public/platform hostnames |
 | `SHOW_PUBLIC_IF_NO_TENANT_FOUND` | Uses public URL routes when an allowed host has no tenant domain |

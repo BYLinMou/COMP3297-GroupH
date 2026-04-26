@@ -82,6 +82,21 @@ docker run --name betatrax `
 
 Then open `http://127.0.0.1:8000/`.
 
+On startup, the container waits for the configured database and applies
+migrations automatically. With `ENABLE_DJANGO_TENANTS=True`, it runs:
+
+```bash
+python manage.py migrate_schemas --shared --noinput
+```
+
+Otherwise it runs:
+
+```bash
+python manage.py migrate --noinput
+```
+
+Set `AUTO_MIGRATE=False` only if migrations are handled outside the container.
+
 ## Local Development
 
 ```bash
@@ -127,14 +142,17 @@ Optional tenant middleware wiring can be enabled with:
 
 When tenant mode is enabled, BetaTrax configures `SHARED_APPS`, `TENANT_APPS`,
 `TENANT_MODEL=defects.Tenant`, `TENANT_DOMAIN_MODEL=defects.Domain`, and the
-`django_tenants.postgresql_backend` database backend. Run shared migrations with:
+`django_tenants.postgresql_backend` database backend. In Docker, shared
+migrations are applied automatically by the entrypoint. For manual local setup,
+run:
 
 ```bash
 python manage.py migrate_schemas --shared
 ```
 
 By default, this flag is disabled to keep local/CI setup simple. Use normal
-`python manage.py migrate` when `ENABLE_DJANGO_TENANTS=False`.
+`python manage.py migrate` when `ENABLE_DJANGO_TENANTS=False` and you are not
+starting through Docker.
 
 ## Automated Testing
 

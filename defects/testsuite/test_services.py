@@ -9,6 +9,7 @@ from defects.authz import ActorContext, ROLE_DEVELOPER, ROLE_OWNER, actor_from_u
 from defects.models import DefectComment, DefectReport, DefectStatus, Product, ProductDeveloper, Tenant
 from defects.services import (
     _demo_dt,
+    _iter_duplicate_descendants,
     _record_status_change,
     apply_action,
     create_defect,
@@ -138,6 +139,9 @@ class DefectServiceTests(TestCase):
         self.assertEqual(str(self.product), "Prod_1")
         self.assertEqual(str(assignment), "dev-001@Prod_1")
         self.assertEqual(str(self.defect), "BT-RP-2401")
+
+        tenant = Tenant.objects.create(schema_name="tenant_a", domain="tenant-a.example.com")
+        self.assertEqual(str(tenant), "tenant_a (tenant-a.example.com)")
 
     def test_demo_helpers_create_seed_users_and_remove_legacy_records(self):
         legacy_product = Product.objects.create(product_id="PRD-1007", name="Legacy", owner_id="legacy-owner")
@@ -437,11 +441,57 @@ class DefectServiceTests(TestCase):
         self.assertEqual(len(mail.outbox), 1)
         self.assertEqual(mail.outbox[0].to, ["child@example.com"])
 
+    def test_iter_duplicate_descendants_ignores_seen_nodes_in_cycles(self):
+        child = DefectReport.objects.create(
+            report_id="BT-RP-2414",
+            product=self.product,
+            version="1.0.14",
+            title="Cycle child",
+            description="desc",
+            steps="steps",
+            tester_id="tester-cycle",
+            status=DefectStatus.NEW,
+            duplicate_of=self.defect,
+        )
+        self.defect.duplicate_of = child
+        self.defect.save(update_fields=["duplicate_of"])
+
+        descendants = _iter_duplicate_descendants(self.defect)
+        self.assertEqual([d.report_id for d in descendants], [child.report_id])
+
+    def test_root_status_change_skips_duplicate_without_email(self):
+        DefectReport.objects.create(
+            report_id="BT-RP-2415",
+            product=self.product,
+            version="1.0.15",
+            title="No-email duplicate",
+            description="desc",
+            steps="steps",
+            tester_id="tester-no-email",
+            tester_email="",
+            status=DefectStatus.NEW,
+            duplicate_of=self.defect,
+        )
+
+        apply_action(
+            self.defect,
+            "accept_open",
+            {"severity": "High", "priority": "P1"},
+            self.owner_actor,
+        )
+
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["tester@example.com"])
+
     def test_register_tenant_validates_and_persists(self):
         with self.assertRaisesMessage(ValidationError, "schema_name cannot be empty."):
             register_tenant("", "team-a.example.com")
         with self.assertRaisesMessage(ValidationError, "schema_name cannot use reserved names."):
             register_tenant("public", "team-a.example.com")
+        with self.assertRaisesMessage(ValidationError, "Invalid schema_name format"):
+            register_tenant("1team", "team-a.example.com")
+        with self.assertRaisesMessage(ValidationError, "domain cannot be empty."):
+            register_tenant("team_a", "")
         with self.assertRaisesMessage(ValidationError, "Invalid domain format"):
             register_tenant("team_a", "invalid_domain")
 
@@ -458,6 +508,12 @@ class DefectServiceTests(TestCase):
     def test_summarize_developer_effectiveness_requires_owner_team_membership(self):
         with self.assertRaisesMessage(ValidationError, "not in the current product owner's team"):
             summarize_developer_effectiveness("owner-001", "dev-404")
+
+    def test_summarize_developer_effectiveness_validates_required_inputs(self):
+        with self.assertRaisesMessage(ValidationError, "owner_id cannot be empty."):
+            summarize_developer_effectiveness("", "dev-001")
+        with self.assertRaisesMessage(ValidationError, "developer_id cannot be empty."):
+            summarize_developer_effectiveness("owner-001", "")
 
     def test_summarize_developer_effectiveness_returns_counts(self):
         defect = DefectReport.objects.create(

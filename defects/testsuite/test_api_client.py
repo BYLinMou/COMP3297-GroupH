@@ -373,6 +373,34 @@ class DefectApiClientTests(DefectApiTestCase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.json()["tenant"]["schema_name"], "team_blue")
 
+        duplicate = self.api_post(
+            self.tenant_register_url,
+            {
+                "schema_name": "team_blue",
+                "domain": "team-blue-2.example.com",
+                "name": "Team Blue Clone",
+            },
+            user=admin_user,
+        )
+        self.assertEqual(duplicate.status_code, 400)
+        self.assertIn("schema_name already exists", duplicate.json()["error"])
+
+    def test_platform_admin_register_tenant_requires_serializer_fields(self):
+        admin_user = self.create_user("platform-admin-2", "platform-admin-2@example.com")
+        admin_user.is_superuser = True
+        admin_user.is_staff = True
+        admin_user.save(update_fields=["is_superuser", "is_staff"])
+
+        response = self.api_post(
+            self.tenant_register_url,
+            {
+                "domain": "missing-schema.example.com",
+            },
+            user=admin_user,
+        )
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("schema_name", response.json()["error"])
+
     def test_non_platform_admin_cannot_register_tenant(self):
         response = self.api_post(
             self.tenant_register_url,

@@ -749,6 +749,52 @@ If you want to enable notification emails, configure these in `.env`:
 
 For Google accounts, use a Google App Password (16 characters) instead of your login password.
 
+## Limitations
+
+<details>
+<summary><strong>Sprint 3 Limitations</strong></summary>
+
+The following limitations are present in the current Sprint 3 implementation:
+
+1. Tenant mode is optional and disabled by default.
+  Real tenant schema isolation requires `ENABLE_DJANGO_TENANTS=True`, `django-tenants`, and PostgreSQL.
+
+2. SQLite local mode remains supported for simple local development and CI.
+  SQLite mode does not provide PostgreSQL schema-based tenant isolation.
+
+3. The tenant registration API creates the tenant, primary domain, and tenant schema.
+  Tenant-scoped admin account creation is available through the platform tenant console, not this API endpoint.
+
+4. In tenant mode, platform routes must be accessed through hostnames configured in `PUBLIC_SCHEMA_DOMAINS`.
+  Product and defect routes are tenant-scoped and should be accessed through tenant domains.
+
+5. Duplicate marking requires the Product Owner to provide a known `duplicate_of` report ID through the API.
+  The backend links the records, but it does not provide an interactive root-selection prompt by itself.
+
+6. Notification emails depend on stored tester email addresses and SMTP configuration.
+  With email disabled or missing recipient email, real mailbox delivery will not occur.
+
+7. Generated API documentation is available only when `drf-spectacular` is installed.
+  Without it, the core API still works but `/api/schema/` and `/api/docs/` are not exposed.
+
+</details>
+
+<details>
+<summary><strong>Sprint 2 Limitations</strong></summary>
+
+Sprint 2 limitations are kept as a short placeholder because the current README
+mainly documents the Sprint 1 baseline and Sprint 3 additions.
+
+1. Product registration is available, but broader product administration workflows are still limited.
+
+2. The backend API is the main supported surface.
+  Frontend coverage for Sprint 2 behavior may be lighter than backend/API coverage.
+
+3. Some behavior from later sprints may supersede or extend Sprint 2 assumptions.
+  Refer to the Sprint 3 API section for the current duplicate, reject, tenant, and metric behavior.
+
+</details>
+
 <details>
 <summary><strong>Sprint 1 Limitations</strong></summary>
 

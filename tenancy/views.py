@@ -14,7 +14,7 @@ from defects.authz import actor_from_user
 
 from .models import Tenant
 from .serializers import TenantRegisterSerializer
-from .services import add_tenant_domain, register_tenant
+from .services import add_tenant_domain, create_tenant_admin_user, register_tenant
 from .utils import is_public_schema_context
 
 try:
@@ -157,18 +157,34 @@ def platform_tenant_list(request):
 
 
 def _handle_create_tenant(request) -> None:
+    admin_username = request.POST.get("tenant_admin_username", "")
+    admin_email = request.POST.get("tenant_admin_email", "")
+    admin_password = request.POST.get("tenant_admin_password", "")
+    if not (admin_username or "").strip():
+        messages.error(request, "tenant_admin_username cannot be empty.")
+        return
+    if not admin_password:
+        messages.error(request, "tenant_admin_password cannot be empty.")
+        return
+
     try:
         tenant = register_tenant(
             schema_name=request.POST.get("schema_name", ""),
             domain=request.POST.get("domain", ""),
             name=request.POST.get("name", ""),
         )
+        admin_user = create_tenant_admin_user(
+            tenant=tenant,
+            username=admin_username,
+            email=admin_email,
+            password=admin_password,
+        )
     except ValidationError as exc:
         detail = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
         messages.error(request, detail)
         return
 
-    messages.success(request, f"Tenant {tenant.schema_name} created.")
+    messages.success(request, f"Tenant {tenant.schema_name} created with admin {admin_user.username}.")
 
 
 def _handle_add_domain(request) -> None:

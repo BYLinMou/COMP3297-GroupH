@@ -446,7 +446,7 @@ Rules:
 - Only platform admins or superusers can access it.
 - It has its own login/logout routes, so `platform_admin` group users do not need Django admin staff access.
 - It lists tenants, domains, and public platform domains from `PUBLIC_SCHEMA_DOMAINS`.
-- It can create tenants and add domains to existing tenants.
+- It can create tenants, create the initial tenant admin account in the tenant schema, and add domains to existing tenants.
 
 ### Developer Effectiveness
 
@@ -598,6 +598,8 @@ Migration command choice:
 | Normal SQLite/PostgreSQL | `python manage.py migrate` |
 | Tenant shared schema | `python manage.py migrate_schemas --shared --noinput` |
 | New tenant schema | Created automatically when `Tenant` is saved |
+
+Startup migrations do not create a public platform superuser automatically. The first public admin is created manually with `python manage.py createsuperuser`. Tenant admin users are created by the platform tenant console when creating a tenant.
 
 ## Deployment Architecture
 

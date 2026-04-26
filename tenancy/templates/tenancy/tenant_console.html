@@ -59,6 +59,18 @@
               <span>Company Name</span>
               <input name="name" placeholder="Team A" />
             </label>
+            <label class="field">
+              <span>Tenant Admin Username</span>
+              <input name="tenant_admin_username" placeholder="team-a-admin" required />
+            </label>
+            <label class="field">
+              <span>Tenant Admin Email</span>
+              <input name="tenant_admin_email" type="email" placeholder="admin@team-a.example.com" />
+            </label>
+            <label class="field">
+              <span>Tenant Admin Password</span>
+              <input name="tenant_admin_password" type="password" autocomplete="new-password" required />
+            </label>
             <div class="actions">
               <button class="primary" type="submit">Create Tenant</button>
             </div>

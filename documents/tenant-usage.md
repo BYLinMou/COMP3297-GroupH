@@ -194,7 +194,7 @@ http://platform.localhost:8000/platform/login/
 This page is for platform admins only. Platform users can be superusers or members of the `platform_admin` group. It can:
 
 - Show all tenants/companies.
-- Create a tenant/company with schema name, first domain, and company name.
+- Create a tenant/company with schema name, first domain, company name, and tenant admin account.
 - Add extra domains to an existing tenant/company.
 
 For local testing, add this to the Windows hosts file if needed:
@@ -210,6 +210,30 @@ PUBLIC_SCHEMA_DOMAINS=platform.localhost
 ```
 
 Do not add `platform.localhost` to `tenancy.Domain`. Tenant domains are for company entrypoints such as `team-a.localhost`; public domains are for platform administration.
+
+## Public And Tenant Admin Accounts
+
+Startup migrations do not create a public superuser automatically. For a new database, create the first public/platform admin manually:
+
+```powershell
+C:\Users\User\.conda\envs\betatrax\python.exe manage.py createsuperuser
+```
+
+Use that account to sign in at:
+
+```text
+http://platform.localhost:8000/platform/login/
+```
+
+When you create a tenant in `/platform/tenants/`, the form also asks for a tenant admin username, email, and password. That account is created inside the tenant schema, not public schema.
+
+Example:
+
+- Public admin logs into `platform.localhost`.
+- Public admin creates tenant `team_a` with domain `team-a.localhost`.
+- Public admin enters tenant admin username `team-a-admin`.
+- `team-a-admin` can log into `http://team-a.localhost:8000/admin/`.
+- The public admin account is separate and does not automatically log into `team-a.localhost`.
 
 ## Check Current Tenants
 

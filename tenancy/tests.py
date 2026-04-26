@@ -1,4 +1,6 @@
 from types import SimpleNamespace
+from contextlib import nullcontext
+from unittest.mock import patch
 
 from django.contrib import admin
 from django.contrib.auth import get_user_model
@@ -16,7 +18,7 @@ from defects.models import Product
 from .middleware import PublicDomainTenantMiddleware
 from .admin import DomainAdmin, TenantAdmin
 from .models import Domain, Tenant
-from .services import add_tenant_domain
+from .services import add_tenant_domain, create_tenant_admin_user
 from .utils import is_public_schema_context
 from .views import TenantRegisterApi, platform_tenant_list
 
@@ -161,7 +163,10 @@ class PublicDomainTenantMiddlewareTests(TestCase):
 
 
 class TenantDomainServiceTests(TestCase):
+    password = "Pass1234!"
+
     def setUp(self):
+        self.user_model = get_user_model()
         self.tenant = Tenant.objects.create(schema_name="team_a", domain="team-a.example.com")
 
     def test_add_tenant_domain_validates_and_persists(self):
@@ -179,6 +184,42 @@ class TenantDomainServiceTests(TestCase):
 
         with self.assertRaisesMessage(Exception, "domain already exists."):
             add_tenant_domain(self.tenant, "app.team-a.example.com")
+
+    def test_create_tenant_admin_user_validates_and_persists_staff_user(self):
+        with self.assertRaisesMessage(Exception, "tenant_admin_username cannot be empty."):
+            create_tenant_admin_user(self.tenant, "", password=self.password)
+        with self.assertRaisesMessage(Exception, "tenant_admin_password cannot be empty."):
+            create_tenant_admin_user(self.tenant, "tenant-admin")
+
+        user = create_tenant_admin_user(
+            tenant=self.tenant,
+            username="tenant-admin",
+            email="tenant-admin@example.com",
+            password=self.password,
+        )
+
+        self.assertEqual(user.username, "tenant-admin")
+        self.assertEqual(user.email, "tenant-admin@example.com")
+        self.assertTrue(user.is_staff)
+        self.assertTrue(user.is_superuser)
+        self.assertTrue(user.check_password(self.password))
+
+        with self.assertRaisesMessage(Exception, "tenant admin username already exists."):
+            create_tenant_admin_user(self.tenant, "tenant-admin", password=self.password)
+
+    @override_settings(USE_DJANGO_TENANTS=True)
+    def test_create_tenant_admin_user_uses_schema_context_in_tenant_mode(self):
+        with patch("tenancy.services.schema_context", return_value=nullcontext()) as mocked_context:
+            create_tenant_admin_user(self.tenant, "schema-admin", password=self.password)
+
+        mocked_context.assert_called_once_with("team_a")
+
+    @override_settings(USE_DJANGO_TENANTS=True)
+    def test_create_tenant_admin_user_falls_back_when_schema_context_unavailable(self):
+        with patch("tenancy.services.schema_context", None):
+            user = create_tenant_admin_user(self.tenant, "fallback-admin", password=self.password)
+
+        self.assertEqual(user.username, "fallback-admin")
 
 
 @override_settings(ROOT_URLCONF="betatrax.public_urls", PUBLIC_SCHEMA_DOMAINS=["platform.localhost"])
@@ -244,11 +285,17 @@ class PlatformTenantConsoleTests(TestCase):
                 "schema_name": "team_blue",
                 "domain": "team-blue.example.com",
                 "name": "Team Blue",
+                "tenant_admin_username": "team-blue-admin",
+                "tenant_admin_email": "team-blue-admin@example.com",
+                "tenant_admin_password": self.password,
             },
         )
         self.assertEqual(create_response.status_code, 302)
         tenant = Tenant.objects.get(schema_name="team_blue")
         self.assertTrue(Domain.objects.filter(domain="team-blue.example.com", tenant=tenant).exists())
+        admin = self.user_model.objects.get(username="team-blue-admin")
+        self.assertTrue(admin.is_staff)
+        self.assertTrue(admin.is_superuser)
 
         add_response = self.client.post(
             self.url,
@@ -268,9 +315,34 @@ class PlatformTenantConsoleTests(TestCase):
         unknown_response = self.client.post(self.url, {"action": "bad"}, follow=True)
         self.assertContains(unknown_response, "Unknown platform action.")
 
+        missing_admin = self.client.post(
+            self.url,
+            {"action": "create_tenant", "schema_name": "team_x", "domain": "team-x.example.com"},
+            follow=True,
+        )
+        self.assertContains(missing_admin, "tenant_admin_username cannot be empty.")
+
+        missing_password = self.client.post(
+            self.url,
+            {
+                "action": "create_tenant",
+                "schema_name": "team_x",
+                "domain": "team-x.example.com",
+                "tenant_admin_username": "team-x-admin",
+            },
+            follow=True,
+        )
+        self.assertContains(missing_password, "tenant_admin_password cannot be empty.")
+
         invalid_create = self.client.post(
             self.url,
-            {"action": "create_tenant", "schema_name": "", "domain": "invalid"},
+            {
+                "action": "create_tenant",
+                "schema_name": "",
+                "domain": "invalid",
+                "tenant_admin_username": "invalid-admin",
+                "tenant_admin_password": self.password,
+            },
             follow=True,
         )
         self.assertContains(invalid_create, "schema_name cannot be empty.")

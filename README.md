@@ -167,6 +167,11 @@ Example deployment split:
 - `platform.example.com` -> public schema tenant console
 - `company-a.example.com` -> tenant schema selected by a `Domain` row
 
+Startup migrations do not create a public platform superuser automatically. Create
+one manually with `python manage.py createsuperuser`, then use that account to
+sign in to `/platform/tenants/`. The tenant console creates tenant-scoped admin
+accounts when creating new tenants.
+
 ## Automated Testing
 
 Sprint 3 testing now uses Django's built-in test runner, Django REST Framework test utilities, and `coverage.py`.

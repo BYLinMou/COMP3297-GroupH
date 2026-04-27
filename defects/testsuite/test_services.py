@@ -1,6 +1,8 @@
 from types import SimpleNamespace
 from unittest.mock import patch
+from unittest import skipIf
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.core import mail
@@ -26,6 +28,7 @@ from tenancy.models import Domain, Tenant
 from tenancy.services import register_tenant
 
 
+@skipIf(settings.USE_DJANGO_TENANTS, "Single-schema signal tests run with ENABLE_DJANGO_TENANTS=False.")
 class DefectSignalTests(TestCase):
     def test_seed_signal_ignores_non_defects_sender(self):
         sender = SimpleNamespace(name="auth")
@@ -73,6 +76,7 @@ class DefectSignalTests(TestCase):
             self.assertFalse(_defect_tables_ready())
 
 
+@skipIf(settings.USE_DJANGO_TENANTS, "Single-schema service tests run with ENABLE_DJANGO_TENANTS=False.")
 class DefectServiceTests(TestCase):
     def setUp(self):
         self.owner_group, _ = Group.objects.get_or_create(name=ROLE_OWNER)

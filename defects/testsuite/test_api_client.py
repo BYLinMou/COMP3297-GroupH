@@ -1,8 +1,12 @@
+from django.conf import settings
+from unittest import skipIf
+
 from defects.models import DefectComment, DefectReport, DefectStatus, Product, ProductDeveloper
 
 from .base import DefectApiTestCase
 
 
+@skipIf(settings.USE_DJANGO_TENANTS, "Single-schema API regression tests run with ENABLE_DJANGO_TENANTS=False.")
 class DefectApiClientTests(DefectApiTestCase):
     def test_submit_defect_invalid_email_returns_serializer_error(self):
         response = self.api_post(

@@ -1,4 +1,6 @@
+from django.conf import settings
 from django.contrib.auth.models import AnonymousUser
+from unittest import skipIf
 from rest_framework.test import APIRequestFactory, force_authenticate
 
 from defects.models import DefectStatus
@@ -13,6 +15,7 @@ from tenancy.views import TenantRegisterApi
 from .base import DefectApiTestCase
 
 
+@skipIf(settings.USE_DJANGO_TENANTS, "Single-schema request-factory tests run with ENABLE_DJANGO_TENANTS=False.")
 class DefectRequestFactoryTests(DefectApiTestCase):
     def setUp(self):
         super().setUp()

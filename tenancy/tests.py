@@ -2,6 +2,7 @@ from types import SimpleNamespace
 from contextlib import nullcontext
 from unittest.mock import patch
 
+from django.conf import settings
 from django.contrib import admin
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
@@ -10,6 +11,7 @@ from django.http import Http404
 from django.test import RequestFactory, TestCase, override_settings
 from django.urls import reverse
 from rest_framework.test import APIRequestFactory, force_authenticate
+from django_tenants.utils import schema_context
 
 from defects.authz import ROLE_PLATFORM_ADMIN
 from defects.admin import ProductAdmin
@@ -32,6 +34,7 @@ class TenantAdminVisibilityTests(TestCase):
             password="Pass1234!",
         )
 
+    @override_settings(USE_DJANGO_TENANTS=False)
     def test_tenant_admin_is_visible_outside_tenant_mode(self):
         tenant_admin = TenantAdmin(Tenant, admin.site)
         domain_admin = DomainAdmin(Domain, admin.site)
@@ -72,6 +75,7 @@ class TenantScopedAdminVisibilityTests(TestCase):
         )
         self.product_admin = ProductAdmin(Product, admin.site)
 
+    @override_settings(USE_DJANGO_TENANTS=False)
     def test_tenant_scoped_admin_is_visible_outside_tenant_mode(self):
         self.assertTrue(self.product_admin.has_module_permission(self.request))
         self.assertTrue(self.product_admin.has_view_permission(self.request))
@@ -124,7 +128,8 @@ class TenantRegisterSchemaGuardTests(TestCase):
 class TenantSchemaUtilityTests(TestCase):
     @override_settings(USE_DJANGO_TENANTS=True)
     def test_missing_request_tenant_uses_connection_schema_fallback(self):
-        self.assertFalse(is_public_schema_context())
+        with patch("tenancy.utils.connection", SimpleNamespace(schema_name="local")):
+            self.assertFalse(is_public_schema_context())
 
 
 class PublicDomainTenantMiddlewareTests(TestCase):
@@ -222,7 +227,11 @@ class TenantDomainServiceTests(TestCase):
         self.assertEqual(user.username, "fallback-admin")
 
 
-@override_settings(ROOT_URLCONF="betatrax.public_urls", PUBLIC_SCHEMA_DOMAINS=["platform.localhost"])
+@override_settings(
+    ROOT_URLCONF="betatrax.public_urls",
+    PUBLIC_SCHEMA_DOMAINS=["testserver", "platform.localhost"],
+    ALLOWED_HOSTS=["testserver", "platform.localhost"],
+)
 class PlatformTenantConsoleTests(TestCase):
     password = "Pass1234!"
 
@@ -293,7 +302,11 @@ class PlatformTenantConsoleTests(TestCase):
         self.assertEqual(create_response.status_code, 302)
         tenant = Tenant.objects.get(schema_name="team_blue")
         self.assertTrue(Domain.objects.filter(domain="team-blue.example.com", tenant=tenant).exists())
-        admin = self.user_model.objects.get(username="team-blue-admin")
+        if settings.USE_DJANGO_TENANTS:
+            with schema_context(tenant.schema_name):
+                admin = self.user_model.objects.get(username="team-blue-admin")
+        else:
+            admin = self.user_model.objects.get(username="team-blue-admin")
         self.assertTrue(admin.is_staff)
         self.assertTrue(admin.is_superuser)
 

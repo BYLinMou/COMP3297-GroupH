@@ -6,6 +6,8 @@ This project now uses Django's built-in test runner together with Django REST Fr
 
 The GitHub Actions CI workflow in `.github/workflows/ci.yml` currently performs these checks:
 
+Non-tenant SQLite job:
+
 - `python manage.py check`
 - `python manage.py makemigrations --check --dry-run`
 - `python manage.py test defects.testsuite.test_services frontend.tests --verbosity 2`
@@ -18,6 +20,14 @@ The GitHub Actions CI workflow in `.github/workflows/ci.yml` currently performs 
 - `python -m coverage xml -o coverage.xml`
 - `python -m coverage html`
 
+Tenant-mode PostgreSQL job:
+
+- Starts a PostgreSQL service container
+- Sets `ENABLE_DJANGO_TENANTS=True`
+- Uses `django_tenants.postgresql_backend`
+- Runs `python manage.py check`
+- Runs `python manage.py test --verbosity 2`
+
 CI uploads `coverage.xml` and `htmlcov/` as the `coverage-report` artifact.
 
 ## Test layers
@@ -28,6 +38,7 @@ CI uploads `coverage.xml` and `htmlcov/` as the `coverage-report` artifact.
 - `defects/testsuite/test_services.py`: unit-style service tests for transition logic, registration rules, and tenant public-schema seed guards
 - `defects/testsuite/test_effectiveness.py`: branch-focused tests for `classify_developer(fixed, reopened)`
 - `betatrax/test_api_schema.py`: OpenAPI schema regression tests for documented operation IDs, response schemas, and defect action enums
+- `tenancy/test_tenant_mode_integration.py`: tenant-mode integration tests that create a PostgreSQL tenant schema, verify tenant-scoped defect API access, and verify public-schema tenant registration
 - `frontend/tests.py`: smoke tests for key HTML flows
 
 ## Shared fixtures
@@ -88,6 +99,19 @@ python -m coverage report
 python -m coverage xml -o coverage.xml
 python -m coverage html
 ```
+
+Run the tenant-mode integration suite against PostgreSQL:
+
+```powershell
+$env:ENABLE_DJANGO_TENANTS='True'
+python manage.py test --verbosity 2
+```
+
+In tenant mode, legacy single-schema defect API, service, request-factory, and
+frontend smoke tests are skipped because their fixtures intentionally create
+tenant-scoped models directly in the active schema. The tenant-mode integration
+tests use `django_tenants.test.TenantTestCase` and create data inside a real
+test tenant schema instead.
 
 Run a tenant-mode configuration check against PostgreSQL:
 

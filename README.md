@@ -585,6 +585,21 @@ When `drf-spectacular` is available, generated API docs are exposed at:
 - OpenAPI schema: `/api/schema/`
 - Swagger UI: `/api/docs/`
 
+The generated schema includes concrete request and response bodies for the
+backend API endpoints:
+
+- Defect submission, listing, detail lookup, and lifecycle actions
+- Product registration
+- Tenant registration
+- Developer effectiveness classification
+
+Defect action documentation includes request examples for `accept_open`,
+`reject`, `duplicate`, `take_ownership`, `set_fixed`, `cannot_reproduce`,
+`set_resolved`, `reopen`, and `add_comment`. Lifecycle status, severity,
+priority, action, and developer classification values are documented as OpenAPI
+enums. Error responses are also represented with a shared `ErrorResponse`
+schema.
+
 </details>
 
 <details>

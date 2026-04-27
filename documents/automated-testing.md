@@ -27,6 +27,7 @@ CI uploads `coverage.xml` and `htmlcov/` as the `coverage-report` artifact.
 - `defects/testsuite/test_views_request_factory.py`: direct view tests using `APIRequestFactory`
 - `defects/testsuite/test_services.py`: unit-style service tests for transition logic, registration rules, and tenant public-schema seed guards
 - `defects/testsuite/test_effectiveness.py`: branch-focused tests for `classify_developer(fixed, reopened)`
+- `betatrax/test_api_schema.py`: OpenAPI schema regression tests for documented operation IDs, response schemas, and defect action enums
 - `frontend/tests.py`: smoke tests for key HTML flows
 
 ## Shared fixtures

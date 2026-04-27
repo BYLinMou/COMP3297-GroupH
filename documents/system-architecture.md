@@ -197,6 +197,11 @@ Tenant URL routing:
 | `/api/docs/` | Swagger UI when drf-spectacular is installed |
 | `/` and frontend paths | `frontend.urls` |
 
+The tenant URL schema documents all tenant-scoped backend APIs with explicit
+request serializers, response serializers, examples, path/query parameter
+descriptions, and enums for defect actions, statuses, severity, priority, and
+developer effectiveness classification.
+
 ### `betatrax/public_urls.py`
 
 Public schema URL routing when tenant mode is enabled:
@@ -211,6 +216,10 @@ Public schema URL routing when tenant mode is enabled:
 | `/api/tenants/register/` | `TenantRegisterApi` |
 | `/api/schema/` | OpenAPI schema when drf-spectacular is installed |
 | `/api/docs/` | Swagger UI when drf-spectacular is installed |
+
+The public schema OpenAPI view documents public/platform endpoints only. In
+tenant mode, defect, product, and developer effectiveness APIs are documented
+from tenant hostnames through `betatrax.urls`.
 
 ## Backend App: `defects`
 

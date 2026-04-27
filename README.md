@@ -45,9 +45,12 @@ Runs on every push and pull request (except changes only in `README.md` / `AGENT
 
 - `tenant-mode-tests` (tenant mode, PostgreSQL):
   - `python manage.py check`
-  - `python manage.py test --verbosity 2`
+  - `python -m coverage run --branch --source=tenancy manage.py test --verbosity 2`
+  - `python -m coverage report --fail-under=100`
+  - `python -m coverage xml -o tenant-coverage.xml`
+  - `python -m coverage html -d tenant-htmlcov`
 
-The CI workflow uploads `coverage.xml` and `htmlcov/` as a `coverage-report` artifact.
+The CI workflow uploads `coverage.xml` and `htmlcov/` as a `coverage-report` artifact, and uploads tenant-mode coverage as `tenant-coverage-report`.
 This is the current Sprint 3 automated testing baseline.
 
 2. **Auto Release** (`.github/workflows/auto-release.yml`)
@@ -311,7 +314,10 @@ Run the tenant-mode integration suite (requires PostgreSQL and `django-tenants`)
 export ENABLE_DJANGO_TENANTS=True
 export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/betatrax
 python manage.py check
-python manage.py test --verbosity 2
+python -m coverage run --branch --source=tenancy manage.py test --verbosity 2
+python -m coverage report --fail-under=100
+python -m coverage xml -o tenant-coverage.xml
+python -m coverage html -d tenant-htmlcov
 ```
 
 Coverage configuration is stored in `.coveragerc`.
@@ -319,6 +325,8 @@ Generated artifacts are:
 
 - `coverage.xml`
 - `htmlcov/index.html`
+- `tenant-coverage.xml`
+- `tenant-htmlcov/index.html`
 
 </details>
 

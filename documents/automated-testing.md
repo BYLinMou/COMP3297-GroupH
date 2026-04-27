@@ -27,9 +27,12 @@ Tenant-mode PostgreSQL job:
 - Sets `ENABLE_DJANGO_TENANTS=True`
 - Uses `django_tenants.postgresql_backend`
 - Runs `python manage.py check`
-- Runs `python manage.py test --verbosity 2`
+- Runs `python -m coverage run --branch --source=tenancy manage.py test --verbosity 2`
+- Runs `python -m coverage report --fail-under=100`
+- Exports `tenant-coverage.xml` and `tenant-htmlcov/`
 
 CI uploads `coverage.xml` and `htmlcov/` as the `coverage-report` artifact.
+Tenant-mode coverage is uploaded separately as the `tenant-coverage-report` artifact.
 
 ## Test layers
 
@@ -105,7 +108,11 @@ Run the tenant-mode integration suite against PostgreSQL:
 
 ```powershell
 $env:ENABLE_DJANGO_TENANTS='True'
-python manage.py test --verbosity 2
+$env:DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/betatrax'
+python -m coverage run --branch --source=tenancy manage.py test --verbosity 2
+python -m coverage report --fail-under=100
+python -m coverage xml -o tenant-coverage.xml
+python -m coverage html -d tenant-htmlcov
 ```
 
 In tenant mode, legacy single-schema defect API, service, request-factory, and
@@ -135,6 +142,8 @@ Generated reports:
 - console summary from `coverage report`
 - XML report at `coverage.xml`
 - HTML report at `htmlcov/index.html`
+- tenant XML report at `tenant-coverage.xml`
+- tenant HTML report at `tenant-htmlcov/index.html`
 
 Coverage is configured through `.coveragerc`.
 Application code is included in coverage; migration files and test modules are intentionally omitted.

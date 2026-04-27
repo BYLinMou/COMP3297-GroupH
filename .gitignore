@@ -4,8 +4,10 @@ __pycache__/
 *.tmp
 tmp-*.yaml
 tmp_*.json
+tmp
 tmp/
 temp/
+tmp*
 
 # Virtual environments
 .venv/
@@ -36,7 +38,9 @@ Thumbs.db
 # Test and coverage outputs
 .coverage
 coverage.xml
+tenant-coverage.xml
 htmlcov/
+tenant-htmlcov/
 
 # UI Storyboard ref
 storyboard_ref/

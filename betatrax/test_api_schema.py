@@ -52,6 +52,20 @@ class ApiSchemaDocumentationTests(TestCase):
         self.assertIn("Action-specific payload rules", action_operation["description"])
         self.assertIn("starter templates", action_operation["description"])
         self.assertIn("examples", action_operation["requestBody"]["content"]["application/json"])
+        action_examples = action_operation["requestBody"]["content"]["application/json"]["examples"]
+        for example_key in (
+            "AcceptAndOpen",
+            "Reject",
+            "MarkDuplicate",
+            "TakeOwnership",
+            "SetFixed",
+            "CannotReproduce",
+            "SetResolved",
+            "Reopen",
+            "AddComment",
+        ):
+            with self.subTest(example_key=example_key):
+                self.assertIn(example_key, action_examples)
 
         self.assertEqual(tenant_operation["summary"], "Register tenant from public schema")
         self.assertIn("starter template", tenant_operation["description"])

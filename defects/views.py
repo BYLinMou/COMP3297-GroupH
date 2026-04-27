@@ -357,6 +357,13 @@ class DefectActionApi(APIView):
                 request_only=True,
             ),
             OpenApiExample(
+                "Reject",
+                value={
+                    "action": "reject",
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
                 "Mark duplicate",
                 value={
                     "action": "duplicate",
@@ -365,10 +372,41 @@ class DefectActionApi(APIView):
                 request_only=True,
             ),
             OpenApiExample(
+                "Take ownership",
+                value={
+                    "action": "take_ownership",
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
                 "Set fixed",
                 value={
                     "action": "set_fixed",
                     "fix_note": "Patched null export path.",
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Cannot reproduce",
+                value={
+                    "action": "cannot_reproduce",
+                    "fix_note": "Unable to reproduce on a clean install.",
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Set resolved",
+                value={
+                    "action": "set_resolved",
+                    "retest_note": "Retested successfully on build 1.4.2.",
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Reopen",
+                value={
+                    "action": "reopen",
+                    "retest_note": "Issue still occurs during regression testing.",
                 },
                 request_only=True,
             ),

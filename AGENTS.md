@@ -8,6 +8,8 @@ Commit after each core function done. Update the VERSION file as well for versio
 
 In this project, we focus on developing backend API. You must complete backend API features and their test cases (make sure coverage 100% for both statements and branches). It is optional to update frontend template and test cases.
 
+Run `conda activate betatrax` if you find packages missing.
+
 ---
 
 Sprint3 sprint backlog:

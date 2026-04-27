@@ -14,6 +14,7 @@ class DefectApiTestCase(APITestCase):
         self.create_url = reverse("defects:api-create-defect")
         self.list_url = reverse("defects:api-list-defects")
         self.register_url = reverse("api-product-register-root")
+        self.tenant_register_url = reverse("api-tenant-register-root")
         self.owner_group, _ = Group.objects.get_or_create(name=ROLE_OWNER)
         self.developer_group, _ = Group.objects.get_or_create(name=ROLE_DEVELOPER)
 
@@ -56,6 +57,9 @@ class DefectApiTestCase(APITestCase):
 
     def action_url(self, defect_id):
         return reverse("defects:api-defect-action", kwargs={"defect_id": defect_id})
+
+    def developer_effectiveness_url(self, developer_id):
+        return reverse("api-developer-effectiveness", kwargs={"developer_id": developer_id})
 
     def api_post(self, url, payload, user=None):
         if user is None:

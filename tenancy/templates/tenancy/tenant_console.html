@@ -1,0 +1,141 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Tenant Console - BetaTrax</title>
+    <link rel="stylesheet" href="{% static 'frontend/styles.css' %}" />
+    <link rel="stylesheet" href="{% static 'tenancy/platform.css' %}" />
+  </head>
+  <body>
+    <main class="layout">
+      <header class="topbar">
+        <div>
+          <div class="brand">BetaTrax Platform</div>
+          <div class="sub">Signed in as {{ request.user.username }}</div>
+        </div>
+        <div class="top-links">
+          <a class="action-link" href="{% url 'admin:index' %}">Django Admin</a>
+          <a class="action-link" href="{% url 'platform-logout' %}">Sign Out</a>
+        </div>
+      </header>
+
+      {% if messages %}
+      <section class="flash-stack">
+        {% for message in messages %}
+        <div class="flash {% if message.tags == 'error' %}flash-error{% else %}flash-ok{% endif %}">{{ message }}</div>
+        {% endfor %}
+      </section>
+      {% endif %}
+
+      <section class="hero">
+        <h1>Tenant Console</h1>
+        <div class="sub">
+          Public domains:
+          {% if public_domains %}
+            {% for domain in public_domains %}<span class="code-pill">{{ domain }}</span>{% endfor %}
+          {% else %}
+            <span class="code-pill">not configured</span>
+          {% endif %}
+        </div>
+      </section>
+
+      <section class="grid two-col">
+        <article class="card">
+          <h2>Create Tenant</h2>
+          <form method="post" class="form-grid">
+            {% csrf_token %}
+            <input type="hidden" name="action" value="create_tenant" />
+            <label class="field">
+              <span>Schema Name</span>
+              <input name="schema_name" placeholder="team_a" required />
+            </label>
+            <label class="field">
+              <span>Primary Domain</span>
+              <input name="domain" placeholder="team-a.example.com" required />
+            </label>
+            <label class="field">
+              <span>Company Name</span>
+              <input name="name" placeholder="Team A" />
+            </label>
+            <label class="field">
+              <span>Tenant Admin Username</span>
+              <input name="tenant_admin_username" placeholder="team-a-admin" required />
+            </label>
+            <label class="field">
+              <span>Tenant Admin Email</span>
+              <input name="tenant_admin_email" type="email" placeholder="admin@team-a.example.com" />
+            </label>
+            <label class="field">
+              <span>Tenant Admin Password</span>
+              <input name="tenant_admin_password" type="password" autocomplete="new-password" required />
+            </label>
+            <div class="actions">
+              <button class="primary" type="submit">Create Tenant</button>
+            </div>
+          </form>
+        </article>
+
+        <article class="card">
+          <h2>Public Entry</h2>
+          <p class="sub">
+            Access this page through a hostname in <span class="mono">PUBLIC_SCHEMA_DOMAINS</span>.
+            Do not create a tenant domain row for that hostname.
+          </p>
+        </article>
+      </section>
+
+      <section class="card tenant-table-card">
+        <div class="tenant-table-head">
+          <h2>Tenants</h2>
+          <span class="sub">{{ tenants|length }} total</span>
+        </div>
+        <div class="tenant-table">
+          <div class="tenant-row tenant-row-header">
+            <div>Schema</div>
+            <div>Company</div>
+            <div>Domains</div>
+            <div>Add Domain</div>
+          </div>
+          {% for tenant in tenants %}
+          <div class="tenant-row">
+            <div>
+              <strong>{{ tenant.schema_name }}</strong>
+              {% if not tenant.is_active %}<span class="status-badge status-rejected">Inactive</span>{% endif %}
+            </div>
+            <div>{{ tenant.name|default:"-" }}</div>
+            <div class="domain-stack">
+              {% for domain in tenant.domains.all %}
+              <span class="code-pill">{{ domain.domain }}{% if domain.is_primary %} primary{% endif %}</span>
+              {% empty %}
+              <span class="sub">No domains</span>
+              {% endfor %}
+            </div>
+            <div>
+              <form method="post" class="inline-domain-form">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="add_domain" />
+                <input type="hidden" name="tenant_id" value="{{ tenant.pk }}" />
+                <input name="domain" placeholder="app.example.com" required />
+                <label class="checkbox-line">
+                  <input type="checkbox" name="is_primary" />
+                  <span>Primary</span>
+                </label>
+                <button type="submit">Add</button>
+              </form>
+            </div>
+          </div>
+          {% empty %}
+          <div class="tenant-row">
+            <div class="sub">No tenants yet.</div>
+            <div></div>
+            <div></div>
+            <div></div>
+          </div>
+          {% endfor %}
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

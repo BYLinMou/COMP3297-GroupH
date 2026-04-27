@@ -11,7 +11,11 @@ https://docs.djangoproject.com/en/5.2/ref/settings/
 """
 
 import os
+import importlib.util
 from pathlib import Path
+from urllib.parse import parse_qsl, unquote, urlparse
+
+from django.core.exceptions import ImproperlyConfigured
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -32,6 +36,14 @@ def _load_dotenv(path: Path) -> None:
 _load_dotenv(BASE_DIR / ".env")
 
 
+def _env_flag(name: str, default: str = "False") -> bool:
+    return os.getenv(name, default).lower() in {"1", "true", "yes", "on"}
+
+
+HAS_DJANGO_TENANTS = importlib.util.find_spec("django_tenants") is not None
+HAS_DRF_SPECTACULAR = importlib.util.find_spec("drf_spectacular") is not None
+
+
 # Quick-start development settings - unsuitable for production
 # See https://docs.djangoproject.com/en/5.2/howto/deployment/checklist/
 
@@ -40,7 +52,7 @@ SECRET_KEY = 'django-insecure-#gy1nwck5!1e@@qcey(j36qe)s5f365s!$fn3hw##3k$5wd2lh
 
 # SECURITY WARNING: don't run with debug turned on in production!
 # Default True for local development convenience; set DJANGO_DEBUG=False in production.
-DEBUG = os.getenv("DJANGO_DEBUG", "True").lower() in {"1", "true", "yes", "on"}
+DEBUG = _env_flag("DJANGO_DEBUG", "True")
 
 def _split_csv_env(name: str) -> list[str]:
     raw = os.getenv(name, "")
@@ -50,6 +62,11 @@ def _split_csv_env(name: str) -> list[str]:
 ALLOWED_HOSTS = _split_csv_env("DJANGO_ALLOWED_HOSTS")
 if not ALLOWED_HOSTS:
     ALLOWED_HOSTS = ["localhost", "127.0.0.1"]
+
+PUBLIC_SCHEMA_DOMAINS = _split_csv_env("PUBLIC_SCHEMA_DOMAINS")
+for public_domain in PUBLIC_SCHEMA_DOMAINS:
+    if public_domain not in ALLOWED_HOSTS:
+        ALLOWED_HOSTS.append(public_domain)
 
 CSRF_TRUSTED_ORIGINS = _split_csv_env("DJANGO_CSRF_TRUSTED_ORIGINS")
 
@@ -71,7 +88,9 @@ USE_X_FORWARDED_HOST = True
 
 # Application definition
 
-INSTALLED_APPS = [
+USE_DJANGO_TENANTS = _env_flag("ENABLE_DJANGO_TENANTS", "False") and HAS_DJANGO_TENANTS
+
+BASE_INSTALLED_APPS = [
     'django.contrib.admin',
     'django.contrib.auth',
     'django.contrib.contenttypes',
@@ -79,9 +98,49 @@ INSTALLED_APPS = [
     'django.contrib.messages',
     'django.contrib.staticfiles',
     'rest_framework',
+    'tenancy',
     'defects',
     'frontend',
 ]
+
+if HAS_DRF_SPECTACULAR:
+    BASE_INSTALLED_APPS.append('drf_spectacular')
+
+TENANT_MODEL = 'tenancy.Tenant'
+TENANT_DOMAIN_MODEL = 'tenancy.Domain'
+
+if USE_DJANGO_TENANTS:
+    SHARED_APPS = [
+        'django_tenants',
+        'django.contrib.admin',
+        'django.contrib.auth',
+        'django.contrib.contenttypes',
+        'django.contrib.sessions',
+        'django.contrib.messages',
+        'django.contrib.staticfiles',
+        'rest_framework',
+        'tenancy',
+    ]
+    if HAS_DRF_SPECTACULAR:
+        SHARED_APPS.append('drf_spectacular')
+
+    TENANT_APPS = [
+        'django.contrib.admin',
+        'django.contrib.auth',
+        'django.contrib.contenttypes',
+        'django.contrib.sessions',
+        'django.contrib.messages',
+        'django.contrib.staticfiles',
+        'rest_framework',
+        'defects',
+        'frontend',
+    ]
+    if HAS_DRF_SPECTACULAR:
+        TENANT_APPS.append('drf_spectacular')
+
+    INSTALLED_APPS = SHARED_APPS + [app for app in TENANT_APPS if app not in SHARED_APPS]
+else:
+    INSTALLED_APPS = BASE_INSTALLED_APPS
 
 MIDDLEWARE = [
     'django.middleware.security.SecurityMiddleware',
@@ -92,6 +151,11 @@ MIDDLEWARE = [
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
 ]
+
+if USE_DJANGO_TENANTS:
+    MIDDLEWARE.insert(0, 'tenancy.middleware.PublicDomainTenantMiddleware')
+    PUBLIC_SCHEMA_URLCONF = 'betatrax.public_urls'
+    SHOW_PUBLIC_IF_NO_TENANT_FOUND = _env_flag("SHOW_PUBLIC_IF_NO_TENANT_FOUND", "True")
 
 ROOT_URLCONF = 'betatrax.urls'
 
@@ -116,12 +180,88 @@ WSGI_APPLICATION = 'betatrax.wsgi.application'
 # Database
 # https://docs.djangoproject.com/en/5.2/ref/settings/#databases
 
-DATABASES = {
-    'default': {
+def _sqlite_path_from_database_url(raw_path: str) -> str:
+    path = unquote(raw_path)
+    if path in {"", "/"}:
+        raise ImproperlyConfigured("SQLite DATABASE_URL must include a database path.")
+    if path == "/:memory:":
+        return ":memory:"
+    if path.startswith("//"):
+        return path[1:]
+    if path.startswith("/./") or path.startswith("/../"):
+        return path[1:]
+    if path.count("/") == 1:
+        return path.lstrip("/")
+    return path
+
+
+def _database_config_from_url(database_url: str) -> tuple[str, dict]:
+    parsed = urlparse(database_url)
+    scheme = parsed.scheme.strip().lower()
+
+    if scheme in {"postgres", "postgresql"}:
+        database_name = unquote(parsed.path.lstrip("/"))
+        if not database_name:
+            raise ImproperlyConfigured("PostgreSQL DATABASE_URL must include a database name.")
+
+        try:
+            port = parsed.port
+        except ValueError as exc:
+            raise ImproperlyConfigured("DATABASE_URL contains an invalid port.") from exc
+
+        config = {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': database_name,
+            'USER': unquote(parsed.username or ''),
+            'PASSWORD': unquote(parsed.password or ''),
+            'HOST': parsed.hostname or '',
+            'PORT': str(port) if port is not None else '',
+        }
+        options = dict(parse_qsl(parsed.query, keep_blank_values=True))
+        if options:
+            config['OPTIONS'] = options
+        return "postgresql", config
+
+    if scheme in {"sqlite", "sqlite3"}:
+        if parsed.netloc:
+            raise ImproperlyConfigured("SQLite DATABASE_URL must not include a host.")
+        return "sqlite", {
+            'ENGINE': 'django.db.backends.sqlite3',
+            'NAME': _sqlite_path_from_database_url(parsed.path),
+        }
+
+    raise ImproperlyConfigured("DATABASE_URL must use sqlite, sqlite3, postgres, or postgresql.")
+
+
+def _database_config_from_env() -> tuple[str, dict]:
+    database_url = os.getenv("DATABASE_URL", "").strip()
+    if database_url:
+        return _database_config_from_url(database_url)
+
+    database_engine = os.getenv("DATABASE_ENGINE", "sqlite").strip().lower()
+    if database_engine == "postgresql":
+        return "postgresql", {
+            'ENGINE': 'django.db.backends.postgresql',
+            'NAME': os.getenv('POSTGRES_DB', 'betatrax'),
+            'USER': os.getenv('POSTGRES_USER', 'postgres'),
+            'PASSWORD': os.getenv('POSTGRES_PASSWORD', 'postgres'),
+            'HOST': os.getenv('POSTGRES_HOST', '127.0.0.1'),
+            'PORT': os.getenv('POSTGRES_PORT', '5432'),
+        }
+    return "sqlite", {
         'ENGINE': 'django.db.backends.sqlite3',
-        'NAME': Path(os.getenv("SQLITE_PATH", str(BASE_DIR / 'db.sqlite3'))),
+        'NAME': str(Path(os.getenv("SQLITE_PATH", str(BASE_DIR / 'db.sqlite3')))),
     }
-}
+
+
+DATABASE_ENGINE, DEFAULT_DATABASE_CONFIG = _database_config_from_env()
+DATABASES = {'default': DEFAULT_DATABASE_CONFIG}
+
+if USE_DJANGO_TENANTS:
+    if DATABASE_ENGINE != "postgresql":
+        raise ImproperlyConfigured("ENABLE_DJANGO_TENANTS=True requires a PostgreSQL DATABASE_URL.")
+    DATABASES['default']['ENGINE'] = 'django_tenants.postgresql_backend'
+    DATABASE_ROUTERS = ('django_tenants.routers.TenantSyncRouter',)
 
 
 # Password validation
@@ -172,6 +312,24 @@ REST_FRAMEWORK = {
         "rest_framework.authentication.BasicAuthentication",
     ],
 }
+
+if HAS_DRF_SPECTACULAR:
+    REST_FRAMEWORK["DEFAULT_SCHEMA_CLASS"] = "drf_spectacular.openapi.AutoSchema"
+    SPECTACULAR_SETTINGS = {
+        "TITLE": "BetaTrax API",
+        "DESCRIPTION": (
+            "BetaTrax defect management API documentation.\n\n"
+            "Swagger UI authentication: before executing protected endpoints, click "
+            "Authorize and enter a Django username/password in the basicAuth section, "
+            "or sign in through the web UI so cookieAuth is available. Path/query "
+            "parameters such as defect_id are business parameters, not login fields. "
+            "Executing a protected endpoint without authorization returns 403."
+        ),
+        "VERSION": "v3",
+        "SWAGGER_UI_SETTINGS": {
+            "persistAuthorization": True,
+        },
+    }
 
 
 # Email

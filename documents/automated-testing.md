@@ -6,14 +6,27 @@ This project now uses Django's built-in test runner together with Django REST Fr
 
 The GitHub Actions CI workflow in `.github/workflows/ci.yml` currently performs these checks:
 
+Non-tenant SQLite job:
+
 - `python manage.py check`
 - `python manage.py makemigrations --check --dry-run`
+- `python manage.py test defects.testsuite.test_services frontend.tests --verbosity 2`
+- `python manage.py test defects.testsuite.test_api_client --verbosity 2`
+- `python manage.py test defects.testsuite.test_views_request_factory --verbosity 2`
 - `python manage.py test --verbosity 2`
 - `python manage.py test defects.tests --verbosity 2`
 - `python -m coverage run --branch manage.py test`
 - `python -m coverage report`
 - `python -m coverage xml -o coverage.xml`
 - `python -m coverage html`
+
+Tenant-mode PostgreSQL job:
+
+- Starts a PostgreSQL service container
+- Sets `ENABLE_DJANGO_TENANTS=True`
+- Uses `django_tenants.postgresql_backend`
+- Runs `python manage.py check`
+- Runs `python manage.py test --verbosity 2`
 
 CI uploads `coverage.xml` and `htmlcov/` as the `coverage-report` artifact.
 
@@ -22,7 +35,10 @@ CI uploads `coverage.xml` and `htmlcov/` as the `coverage-report` artifact.
 - `defects/tests.py`: compatibility entrypoint that re-exports the Sprint 3 defect test suite for CI and explicit test labels
 - `defects/testsuite/test_api_client.py`: endpoint-level integration tests using `APITestCase` and `APIClient`
 - `defects/testsuite/test_views_request_factory.py`: direct view tests using `APIRequestFactory`
-- `defects/testsuite/test_services.py`: unit-style service tests for transition logic and product registration rules
+- `defects/testsuite/test_services.py`: unit-style service tests for transition logic, registration rules, and tenant public-schema seed guards
+- `defects/testsuite/test_effectiveness.py`: branch-focused tests for `classify_developer(fixed, reopened)`
+- `betatrax/test_api_schema.py`: OpenAPI schema regression tests for documented operation IDs, response schemas, and defect action enums
+- `tenancy/test_tenant_mode_integration.py`: tenant-mode integration tests that create a PostgreSQL tenant schema, verify tenant-scoped defect API access, and verify public-schema tenant registration
 - `frontend/tests.py`: smoke tests for key HTML flows
 
 ## Shared fixtures
@@ -45,6 +61,30 @@ Run all tests:
 python manage.py test --verbosity 2
 ```
 
+Run unit/service and frontend tests explicitly:
+
+```powershell
+python manage.py test defects.testsuite.test_services frontend.tests --verbosity 2
+```
+
+Run endpoint tests with DRF `APIClient`:
+
+```powershell
+python manage.py test defects.testsuite.test_api_client --verbosity 2
+```
+
+Run direct view tests with DRF `APIRequestFactory`:
+
+```powershell
+python manage.py test defects.testsuite.test_views_request_factory --verbosity 2
+```
+
+Run effectiveness classification tests only:
+
+```powershell
+python manage.py test defects.testsuite.test_effectiveness --verbosity 2
+```
+
 Run the explicit compatibility entrypoint:
 
 ```powershell
@@ -58,6 +98,35 @@ python -m coverage run --branch manage.py test
 python -m coverage report
 python -m coverage xml -o coverage.xml
 python -m coverage html
+```
+
+Run the tenant-mode integration suite against PostgreSQL:
+
+```powershell
+$env:ENABLE_DJANGO_TENANTS='True'
+python manage.py test --verbosity 2
+```
+
+In tenant mode, legacy single-schema defect API, service, request-factory, and
+frontend smoke tests are skipped because their fixtures intentionally create
+tenant-scoped models directly in the active schema. The tenant-mode integration
+tests use `django_tenants.test.TenantTestCase` and create data inside a real
+test tenant schema instead.
+
+Run a tenant-mode configuration check against PostgreSQL:
+
+```powershell
+$env:ENABLE_DJANGO_TENANTS='True'
+$env:DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/betatrax'
+python manage.py check
+python manage.py migrate_schemas --shared --noinput
+```
+
+Run focused branch+statement coverage for classification module:
+
+```powershell
+python -m coverage run --branch manage.py test defects.testsuite.test_effectiveness --verbosity 2
+python -m coverage report -m --include="defects/effectiveness.py"
 ```
 
 Generated reports:
@@ -76,3 +145,4 @@ Application code is included in coverage; migration files and test modules are i
 - Prefer `APITestCase` for endpoint flows and `APIRequestFactory` for direct view assertions
 - Keep reusable fixtures in `defects/testsuite/base.py`
 - Preserve `defects/tests.py` as a stable compatibility entrypoint when reorganizing the defect test suite
+- Use `if ... else ...` instead of a logically unreachable `elif` branch when earlier guards already guarantee only two valid actor paths, otherwise branch coverage may report a false gap

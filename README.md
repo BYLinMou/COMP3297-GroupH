@@ -4,15 +4,26 @@ BetaTrax is a lightweight defect tracking system built for the COMP3297 software
 It supports the core bug lifecycle from **New -> Open -> Assigned -> Fixed -> Resolved**.
 The current implementation is built on a Django-based architecture (see the `betatrax/` project module).
 
+## Project Documents
+
+Start here for deeper project details:
+
+- [System architecture](documents/system-architecture.md)
+- [Automated testing](documents/automated-testing.md)
+- [Tenant usage](documents/tenant-usage.md)
+
 ## Demo Website
 
-- Demo website: [betatrax.zeabur.app](https://betatrax.zeabur.app)
-- Demo website 2 (backup): [betatrax.yeelam.site](https://betatrax.yeelam.site)
+- Demo website (public schema): [betatrax.zeabur.app](https://betatrax.zeabur.app)
+- Demo website (public schema) 2 (backup): [betatrax.yeelam.site](https://betatrax.yeelam.site)
 - Admin account: `user`
 - Admin password: `testtest`
 - We recommend using the demo website first because SMTP is already configured there and it is easier to use for evaluation.
 
 ## Workflows
+
+<details>
+<summary><strong>GitHub Actions workflows</strong></summary>
 
 This repository currently uses three GitHub Actions workflows:
 
@@ -20,6 +31,9 @@ This repository currently uses three GitHub Actions workflows:
 Runs on every push and pull request to validate functionality with:
 - `python manage.py check`
 - `python manage.py makemigrations --check --dry-run`
+- `python manage.py test defects.testsuite.test_services frontend.tests --verbosity 2`
+- `python manage.py test defects.testsuite.test_api_client --verbosity 2`
+- `python manage.py test defects.testsuite.test_views_request_factory --verbosity 2`
 - `python manage.py test --verbosity 2`
 - `python manage.py test defects.tests --verbosity 2`
 - `python -m coverage run --branch manage.py test`
@@ -41,7 +55,13 @@ It can also be triggered manually with an optional `image_tag` input (for exampl
 By default, image version tag is read from the `VERSION` file. Automatic runs also update `latest`.
 The published image path is `ghcr.io/<owner>/<repo>`.
 
-## Docker Deployment
+</details>
+
+## Deployment
+
+<details>
+<summary><strong>Docker Deployment</strong></summary>
+
 We recommend using Docker container setup for an isolated and consistent environment.
 
 Use the published image:
@@ -79,7 +99,25 @@ docker run --name betatrax `
 
 Then open `http://127.0.0.1:8000/`.
 
-## Local Development
+On startup, the container waits for the configured database and applies
+migrations automatically. With `ENABLE_DJANGO_TENANTS=True`, it runs:
+
+```bash
+python manage.py migrate_schemas --shared --noinput
+```
+
+Otherwise it runs:
+
+```bash
+python manage.py migrate --noinput
+```
+
+Set `AUTO_MIGRATE=False` only if migrations are handled outside the container.
+
+</details>
+
+<details>
+<summary><strong>Local Deployment</strong></summary>
 
 ```bash
 # Create and activate conda environment
@@ -92,8 +130,7 @@ pip install -r requirements.txt
 # Copy environment config (edit as needed)
 cp .env.example .env
 
-# Set SQLITE_PATH=./data/db.sqlite3 in .env
-(Get-Content .env) -replace '^SQLITE_PATH=.*$', 'SQLITE_PATH=./data/db.sqlite3' | Set-Content .env
+# .env.example uses DATABASE_URL=sqlite:///./data/db.sqlite3
 mkdir data
 
 # Apply database migrations
@@ -104,6 +141,93 @@ python manage.py runserver
 ```
 
 The app will be available at `http://127.0.0.1:8000/`.
+
+### Local PostgreSQL (Docker)
+
+If you want to run locally with PostgreSQL (required for `django-tenants`), start a local Postgres container:
+
+```bash
+docker run --name betatrax-postgres \
+  -e POSTGRES_USER=postgres \
+  -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=betatrax \
+  -p 5432:5432 \
+  -v "$(pwd)/data/pgdata:/var/lib/postgresql/data" \
+  -d postgres:16
+```
+
+PowerShell equivalent:
+
+```powershell
+docker run --name betatrax-postgres `
+  -e POSTGRES_USER=postgres `
+  -e POSTGRES_PASSWORD=postgres `
+  -e POSTGRES_DB=betatrax `
+  -p 5432:5432 `
+  -v "${PWD}\\data\\pgdata:/var/lib/postgresql/data" `
+  -d postgres:16
+```
+
+Then configure `.env`:
+
+- `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/betatrax`
+- `ENABLE_DJANGO_TENANTS=True` (optional; required for schema-based tenant isolation)
+
+When `ENABLE_DJANGO_TENANTS=True`, apply shared/public migrations with:
+
+```bash
+python manage.py migrate_schemas --shared
+```
+
+### PostgreSQL + Tenant Ready Config (Sprint 3)
+
+Sprint 3 adds PostgreSQL-ready configuration and tenant registration API.
+
+Set these variables in `.env` when using PostgreSQL:
+
+- `DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/betatrax`
+
+Optional tenant middleware wiring can be enabled with:
+
+- `ENABLE_DJANGO_TENANTS=True`
+- `PUBLIC_SCHEMA_DOMAINS=platform.example.com,admin.example.com`
+
+When tenant mode is enabled, BetaTrax configures `SHARED_APPS`, `TENANT_APPS`,
+`TENANT_MODEL=tenancy.Tenant`, `TENANT_DOMAIN_MODEL=tenancy.Domain`, and the
+`django_tenants.postgresql_backend` database backend. The `tenancy` app stores
+company/tenant registry data in the public schema, while `defects` stores
+tenant-scoped product and defect data inside each company schema. In Docker, shared
+migrations are applied automatically by the entrypoint. For manual local setup,
+run:
+
+```bash
+python manage.py migrate_schemas --shared
+```
+
+Demo defect seed data is skipped during shared/public migrations because defect
+tables live inside tenant schemas.
+
+By default, this flag is disabled to keep local/CI setup simple. Use normal
+`python manage.py migrate` when `ENABLE_DJANGO_TENANTS=False` and you are not
+starting through Docker.
+
+Use `PUBLIC_SCHEMA_DOMAINS` for platform/admin hostnames that should always use
+the public schema. Multiple hostnames are comma-separated. Do not create `Domain`
+rows for those hostnames. Public routes expose `/platform/tenants/`, `/admin/`,
+tenant registration, and API docs only; product and defect routes are tenant-scoped.
+
+Example deployment split:
+
+- `platform.example.com` -> public schema tenant console
+- `admin.example.com` -> public schema tenant console/admin alias
+- `company-a.example.com` -> tenant schema selected by a `Domain` row
+
+Startup migrations do not create a public platform superuser automatically. Create
+one manually with `python manage.py createsuperuser`, then use that account to
+sign in to `/platform/tenants/`. The tenant console creates tenant-scoped admin
+accounts when creating new tenants.
+
+</details>
 
 ## Automated Testing
 
@@ -119,15 +243,42 @@ Sprint 3 testing now uses Django's built-in test runner, Django REST Framework t
   Direct view tests using `APIRequestFactory`
 - `defects/testsuite/test_services.py`
   Service-layer tests for status transition and registration logic
+- `defects/testsuite/test_effectiveness.py`
+  Branch/statement coverage tests for developer effectiveness classification rules
 - `frontend/tests.py`
   Smoke tests for key HTML flows
 
-### Local commands
+<details>
+<summary><strong>Local commands</strong></summary>
 
 Run the full discovered suite:
 
 ```bash
 python manage.py test --verbosity 2
+```
+
+Run the unit/frontend layer explicitly:
+
+```bash
+python manage.py test defects.testsuite.test_services frontend.tests --verbosity 2
+```
+
+Run endpoint tests with DRF `APIClient`:
+
+```bash
+python manage.py test defects.testsuite.test_api_client --verbosity 2
+```
+
+Run direct view tests with `APIRequestFactory`:
+
+```bash
+python manage.py test defects.testsuite.test_views_request_factory --verbosity 2
+```
+
+Run effectiveness classification tests explicitly:
+
+```bash
+python manage.py test defects.testsuite.test_effectiveness --verbosity 2
 ```
 
 Run the compatibility entrypoint explicitly:
@@ -153,7 +304,317 @@ Generated artifacts are:
 
 For implementation details and conventions, see [documents/automated-testing.md](documents/automated-testing.md).
 
-## API (Sprint 2)
+</details>
+
+## API
+
+<details>
+<summary><strong>API (Sprint 3)</strong></summary>
+
+Base paths:
+
+- Defect actions: `/api/defects/<defect_id>/actions/`
+- Tenant registration: `/api/tenants/register/`
+- Developer metric: `/api/developers/{developer_id}/effectiveness/`
+
+Testing commands are provided in the Automated Testing section above.
+
+### 1) Reject defect report
+
+- Method: `POST`
+- Path: `/api/defects/<defect_id>/actions/`
+- Content-Type: `application/json`
+- Auth: required (`Session` or `Basic`)
+- Role: Product Owner only
+- Valid current status: `New`
+
+Request example:
+
+```json
+{
+  "action": "reject"
+}
+```
+
+Response `200`:
+
+```json
+{
+  "message": "Defect moved to Rejected.",
+  "report_id": "BT-RP-1002",
+  "status": "Rejected"
+}
+```
+
+Responses:
+- `200` rejected successfully
+- `400` invalid transition or invalid role/user
+- `403` unauthenticated account
+- `404` defect not found
+
+### 2) Mark duplicate defect report
+
+- Method: `POST`
+- Path: `/api/defects/<defect_id>/actions/`
+- Content-Type: `application/json`
+- Auth: required (`Session` or `Basic`)
+- Role: Product Owner only
+- Valid current status: `New`
+- Optional fields:
+  - `duplicate_of` (existing root or parent `report_id`)
+
+Request example:
+
+```json
+{
+  "action": "duplicate",
+  "duplicate_of": "BT-RP-1001"
+}
+```
+
+Response `200`:
+
+```json
+{
+  "message": "Defect moved to Duplicate.",
+  "report_id": "BT-RP-1002",
+  "status": "Duplicate"
+}
+```
+
+Responses:
+- `200` marked duplicate successfully
+- `400` invalid transition, invalid role/user, or unknown `duplicate_of`
+- `403` unauthenticated account
+- `404` defect not found
+
+When `duplicate_of` is supplied, the report is linked to the selected parent/root defect.
+
+### 3) Mark cannot reproduce
+
+- Method: `POST`
+- Path: `/api/defects/<defect_id>/actions/`
+- Content-Type: `application/json`
+- Auth: required (`Session` or `Basic`)
+- Role: assigned Developer only
+- Valid current status: `Assigned`
+- Optional fields:
+  - `fix_note`
+
+Request example:
+
+```json
+{
+  "action": "cannot_reproduce",
+  "fix_note": "Cannot reproduce on local build 1.0.2."
+}
+```
+
+Response `200`:
+
+```json
+{
+  "message": "Defect moved to Cannot Reproduce.",
+  "report_id": "BT-RP-1002",
+  "status": "Cannot Reproduce"
+}
+```
+
+Responses:
+- `200` updated successfully
+- `400` invalid transition, invalid role/user, or unassigned developer
+- `403` unauthenticated account
+- `404` defect not found
+
+### 4) Reopen defect report
+
+- Method: `POST`
+- Path: `/api/defects/<defect_id>/actions/`
+- Content-Type: `application/json`
+- Auth: required (`Session` or `Basic`)
+- Role: Product Owner only
+- Valid current status: `Fixed`
+- Optional fields:
+  - `retest_note`
+
+Request example:
+
+```json
+{
+  "action": "reopen",
+  "retest_note": "Issue still appears after retest."
+}
+```
+
+Response `200`:
+
+```json
+{
+  "message": "Defect moved to Reopened.",
+  "report_id": "BT-RP-1002",
+  "status": "Reopened"
+}
+```
+
+Responses:
+- `200` reopened successfully
+- `400` invalid transition or invalid role/user
+- `403` unauthenticated account
+- `404` defect not found
+
+### 5) Add comment
+
+- Method: `POST`
+- Path: `/api/defects/<defect_id>/actions/`
+- Content-Type: `application/json`
+- Auth: required (`Session` or `Basic`)
+- Role: Product Owner or Developer
+- Required fields:
+  - `comment`
+
+Request example:
+
+```json
+{
+  "action": "add_comment",
+  "comment": "Please attach browser and OS details."
+}
+```
+
+Response `200`:
+
+```json
+{
+  "message": "Comment added.",
+  "report_id": "BT-RP-1002",
+  "status": "New"
+}
+```
+
+Responses:
+- `200` comment stored with author identity and timestamp
+- `400` empty comment or invalid role/user
+- `403` unauthenticated account
+- `404` defect not found
+
+### 6) Register tenant
+
+- Method: `POST`
+- Path: `/api/tenants/register/`
+- Content-Type: `application/json`
+- Auth: required (`Session` or `Basic`)
+- Role: Platform Admin only (superuser or `platform_admin` group)
+- Schema: public schema only
+
+Request example:
+
+```json
+{
+  "schema_name": "team_a",
+  "domain": "team-a.example.com",
+  "name": "Team A"
+}
+```
+
+Response `201`:
+
+```json
+{
+  "message": "Tenant registered successfully.",
+  "tenant": {
+    "schema_name": "team_a",
+    "domain": "team-a.example.com",
+    "name": "Team A",
+    "is_active": true
+  }
+}
+```
+
+Responses:
+- `201` tenant created
+- `400` validation failure
+- `403` non-platform-admin account
+- `404` called from a tenant schema when tenant mode is enabled
+
+In tenant mode, successful registration creates the tenant row, a primary
+`Domain` row in the public schema, and the PostgreSQL schema for that tenant.
+
+### 7) Developer effectiveness metric
+
+- Method: `GET`
+- Path: `/api/developers/{developer_id}/effectiveness/`
+- Auth: required (`Session` or `Basic`)
+- Role: Product Owner only
+
+Response example:
+
+```json
+{
+  "developer_id": "dev-001",
+  "fixed": 36,
+  "reopened": 2,
+  "reopen_ratio": 0.05555555555555555,
+  "classification": "Fair"
+}
+```
+
+Classification rules:
+- `fixed < 20` -> `Insufficient data`
+- `reopened / fixed < 1/32` -> `Good`
+- `1/32 <= reopened / fixed < 1/8` -> `Fair`
+- `reopened / fixed >= 1/8` -> `Poor`
+
+Responses:
+- `200` metric returned
+- `400` developer is not in the current Product Owner's team
+- `403` non-owner account
+
+### 8) Duplicate chain email notification
+
+This behavior is automatic when status-changing defect actions are applied.
+
+When the root defect of a duplicate chain changes status, the system now:
+
+- Finds all linked duplicate reports recursively
+- Sends notification emails to testers of linked duplicates (only when those reports store tester email)
+
+### 9) API documentation
+
+When `drf-spectacular` is available, generated API docs are exposed at:
+
+- OpenAPI schema: `/api/schema/`
+- Swagger UI: `/api/docs/`
+
+To try protected endpoints in Swagger UI, click `Authorize` first and enter a
+Django username/password under `basicAuth`, or sign in through the web UI so the
+browser has a `sessionid` cookie for `cookieAuth`. Fields shown under
+`Parameters`, such as `defect_id`, are endpoint inputs only; they are not
+authentication fields. Executing protected endpoints without this authorization
+returns `403`.
+
+The generated schema includes concrete request and response bodies for the
+backend API endpoints:
+
+- Defect submission, listing, detail lookup, and lifecycle actions
+- Product registration
+- Tenant registration
+- Developer effectiveness classification
+
+Swagger request bodies stay editable for manual testing. Core write endpoints
+also provide starter example payloads in Swagger UI so reviewers can try the
+API immediately and then adjust the values as needed.
+
+Defect action documentation explains the workflow rules for `accept_open`,
+`reject`, `duplicate`, `take_ownership`, `set_fixed`, `cannot_reproduce`,
+`set_resolved`, `reopen`, and `add_comment`. Lifecycle status, severity,
+priority, action, and developer classification values are documented as OpenAPI
+enums. Error responses are also represented with a shared `ErrorResponse`
+schema.
+
+</details>
+
+<details>
+<summary><strong>API (Sprint 2)</strong></summary>
 
 Testing commands are provided in [testcasecommand.txt](documents/testcasecommand.txt) (using demo website 2).
 
@@ -179,7 +640,10 @@ Responses:
 - `400` validation failure (duplicate product, owner already has a product, invalid developer, etc.)
 - `403` non-owner account
 
-## API (Sprint 1)
+</details>
+
+<details>
+<summary><strong>API (Sprint 1)</strong></summary>
 
 Base path: `/api/defects/`
 
@@ -225,8 +689,6 @@ Responses:
 - Query params (all optional):
   - `status` (for example `New`, `Open`, `Assigned`, `Fixed`, `Resolved`)
   - `product_id`
-  - `owner_id` (must match logged-in Product Owner username)
-  - `developer_id` (must match logged-in Developer username)
 
 Response `200`:
 
@@ -272,13 +734,20 @@ Supported `action` values:
 Action-specific fields:
 - `accept_open`: `severity` (`High|Medium|Low`), `priority` (`P1|P2|P3`), `backlog_ref` (optional)
 - `reject`: no additional field
-- `duplicate`: `duplicate_of` (optional)
+- `duplicate`: `duplicate_of` (existing defect report ID such as `BT-RP-1001`)
 - `take_ownership`: no additional field (assignee is current user)
 - `set_fixed`: `fix_note` (optional)
 - `cannot_reproduce`: `fix_note` (optional)
 - `set_resolved`: `retest_note` (optional)
 - `reopen`: `retest_note` (optional)
 - `add_comment`: `comment` (author is current user)
+
+Field value rules:
+- `severity` only accepts `High`, `Medium`, or `Low`. Passing `"string"` returns `400`.
+- `priority` only accepts `P1`, `P2`, or `P3`. Passing `"string"` returns `400`.
+- `duplicate_of` should be a real defect report ID. Passing `"string"` only works if a defect with report ID `string` actually exists; otherwise it returns `400`.
+- `backlog_ref`, `fix_note`, and `retest_note` are free-text fields, so `"string"` is accepted as normal text.
+- `comment` is also free text, but blank or whitespace-only values return `400`.
 
 Response `200`:
 
@@ -295,9 +764,12 @@ Error responses:
 - `404` defect not found
 - `403` unauthenticated or unauthorized access
 
+</details>
+
 ## Demo Accounts (Auto-created)
 
-The system auto-creates Sprint 1 demo users and roles:
+In normal single-database mode, and inside tenant schemas, the system auto-creates
+Sprint 1 demo users and roles:
 
 - Product Owner: `owner-001`
 - Developers: `dev-001`, `dev-004`
@@ -307,8 +779,11 @@ Use `/auth/` for sign in, then access owner/developer screens.
 
 ## Initial Demo Data (Auto-seeded)
 
-After running `python manage.py migrate`, the app seeds initial data on first use
-(for example when opening `/`, `/auth/`, or any defects API endpoint).
+After running `python manage.py migrate` in normal single-database mode, the app
+seeds initial data on first use (for example when opening `/`, `/auth/`, or any
+defects API endpoint). In tenant mode, shared/public migrations skip this business
+demo seed; Product Owner and Developer demo identities belong in tenant schemas,
+not in the public schema.
 
 Seeded records include:
 
@@ -342,7 +817,61 @@ If you want to enable notification emails, configure these in `.env`:
 
 For Google accounts, use a Google App Password (16 characters) instead of your login password.
 
-## Sprint 1 Limitations
+## Limitations
+
+<details>
+<summary><strong>Sprint 3 Limitations</strong></summary>
+
+The following limitations are present in the current Sprint 3 implementation:
+
+1. Tenant mode is optional and disabled by default.
+  Real tenant schema isolation requires `ENABLE_DJANGO_TENANTS=True`, `django-tenants`, and PostgreSQL.
+
+2. SQLite local mode remains supported for simple local development and CI.
+  SQLite mode does not provide PostgreSQL schema-based tenant isolation.
+
+3. The tenant registration API creates the tenant, primary domain, and tenant schema.
+  Tenant-scoped admin account creation is available through the platform tenant console, not this API endpoint.
+
+4. In tenant mode, platform routes must be accessed through hostnames configured in `PUBLIC_SCHEMA_DOMAINS`.
+  Product and defect routes are tenant-scoped and should be accessed through tenant domains.
+
+5. Duplicate marking requires the Product Owner to provide a known `duplicate_of` report ID through the API.
+  The backend links the records, but it does not provide an interactive root-selection prompt by itself.
+
+6. Notification emails depend on stored tester email addresses and SMTP configuration.
+  With email disabled or missing recipient email, real mailbox delivery will not occur.
+
+7. Generated API documentation is available only when `drf-spectacular` is installed.
+  Without it, the core API still works but `/api/schema/` and `/api/docs/` are not exposed.
+
+8. Tenant-mode tests are split from the single-schema regression suite. With
+   `ENABLE_DJANGO_TENANTS=True`, tenant integration tests create a real test
+   tenant schema and verify tenant-scoped defect API access plus public-schema
+   tenant registration. Legacy single-schema defect/frontend tests are skipped
+   in that mode because their fixtures intentionally create tenant-scoped models
+   directly in the active schema.
+
+</details>
+
+<details>
+<summary><strong>Sprint 2 Limitations</strong></summary>
+
+Sprint 2 limitations are kept as a short placeholder because the current README
+mainly documents the Sprint 1 baseline and Sprint 3 additions.
+
+1. Product registration is available, but broader product administration workflows are still limited.
+
+2. The backend API is the main supported surface.
+  Frontend coverage for Sprint 2 behavior may be lighter than backend/API coverage.
+
+3. Some behavior from later sprints may supersede or extend Sprint 2 assumptions.
+  Refer to the Sprint 3 API section for the current duplicate, reject, tenant, and metric behavior.
+
+</details>
+
+<details>
+<summary><strong>Sprint 1 Limitations</strong></summary>
 
 The following limitations are present in this Sprint 1 executable:
 
@@ -364,6 +893,8 @@ The following limitations are present in this Sprint 1 executable:
     No self-service signup/password reset is provided (Only available through admin console).
 
 6. UI is a Sprint 1 MVP and does not cover all future lifecycle paths from full use-case set.
+
+</details>
 
 ## License
 

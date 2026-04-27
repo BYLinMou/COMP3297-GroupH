@@ -7,18 +7,91 @@ from .services import register_product
 from .authz import actor_from_user
 from .models import DefectReport, Product
 from django.core.exceptions import ValidationError
-from .serializers import DefectActionSerializer, DefectCreateSerializer
+from .serializers import (
+    AuthenticationErrorResponseSerializer,
+    DEFECT_ACTION_CHOICES,
+    DEFECT_STATUS_VALUES,
+    DefectActionRequestDocSerializer,
+    DefectActionResponseSerializer,
+    DefectCreateBadRequestResponseSerializer,
+    DefectActionSerializer,
+    DefectCreateRequestDocSerializer,
+    DefectCreateResponseSerializer,
+    DefectCreateSerializer,
+    DefectDetailResponseSerializer,
+    DefectListResponseSerializer,
+    DeveloperEffectivenessResponseSerializer,
+    ErrorResponseSerializer,
+    MissingFieldsErrorResponseSerializer,
+    ProductRegisterRequestSerializer,
+    ProductRegisterResponseSerializer,
+)
 from .services import (
     STATUS_BY_SLUG,
     apply_action,
     create_defect,
     serialize_defect_detail_for_api,
     serialize_defect_for_api,
+    summarize_developer_effectiveness,
 )
+
+try:
+    from drf_spectacular.utils import OpenApiExample, OpenApiParameter, OpenApiResponse, extend_schema
+except Exception:  # pragma: no cover - optional dependency fallback
+    class OpenApiExample:  # type: ignore[override]
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class OpenApiParameter:  # type: ignore[override]
+        QUERY = "query"
+        PATH = "path"
+
+        def __init__(self, *args, **kwargs):
+            pass
+
+    class OpenApiResponse:  # type: ignore[override]
+        def __init__(self, *args, **kwargs):
+            pass
+
+    def extend_schema(*args, **kwargs):  # type: ignore[override]
+        def _decorator(obj):
+            return obj
+
+        return _decorator
 
 class ProductRegisterApi(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        operation_id="registerProduct",
+        summary="Register product in current tenant",
+        description=(
+            "Requires Swagger Authorize/basicAuth or a valid session cookie. "
+            "Only Product Owners can register a product and bind developer accounts in one request. "
+            "Use this endpoint to create a product visible inside the current database scope. "
+            "The request example is a starter template and can be edited freely."
+        ),
+        request=ProductRegisterRequestSerializer,
+        responses={
+            201: OpenApiResponse(ProductRegisterResponseSerializer, description="Product registered."),
+            400: OpenApiResponse(ErrorResponseSerializer, description="Validation failed."),
+            403: OpenApiResponse(
+                AuthenticationErrorResponseSerializer,
+                description="Authentication is missing or the authenticated user is not a Product Owner.",
+            ),
+        },
+        examples=[
+            OpenApiExample(
+                "Register product template",
+                value={
+                    "product_id": "Prod_3",
+                    "name": "BetaTrax Mobile",
+                    "developers": ["dev-004"],
+                },
+                request_only=True,
+            )
+        ],
+    )
     def post(self, request):
         actor = actor_from_user(request.user)
         if not actor.is_owner:
@@ -40,9 +113,40 @@ class DefectCreateApi(APIView):
     permission_classes = [AllowAny]
 
     @transaction.atomic
+    @extend_schema(
+        operation_id="submitDefect",
+        summary="Submit defect",
+        description=(
+            "Create a new defect report from an external testing system. "
+            "Authentication is optional for this endpoint. "
+            "The request example is a starter template and can be edited freely."
+        ),
+        request=DefectCreateRequestDocSerializer,
+        responses={
+            201: OpenApiResponse(DefectCreateResponseSerializer, description="Defect submitted."),
+            400: OpenApiResponse(
+                DefectCreateBadRequestResponseSerializer,
+                description="Required fields are missing/blank or serializer validation failed.",
+            ),
+            404: OpenApiResponse(ErrorResponseSerializer, description="Product ID was not found."),
+        },
+        examples=[
+            OpenApiExample(
+                "Submit defect template",
+                value={
+                    "product_id": "Prod_1",
+                    "version": "1.4.0",
+                    "title": "Export button fails",
+                    "description": "The export button returns a server error.",
+                    "steps": "Open reports, click Export.",
+                    "tester_id": "tester-104",
+                    "email": "tester104@example.com",
+                },
+                request_only=True,
+            )
+        ],
+    )
     def post(self, request):
-
-
         serializer = DefectCreateSerializer(data=request.data)
         if not serializer.is_valid():
             details = serializer.errors
@@ -83,6 +187,40 @@ class DefectCreateApi(APIView):
 class DefectListApi(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        operation_id="listDefects",
+        summary="List defects visible to current user",
+        description=(
+            "Requires Swagger Authorize/basicAuth or a valid session cookie. "
+            "List defects by filters. Product Owners and Developers have different visibility scopes. "
+            "This endpoint returns only defects visible to the authenticated user after role-based filtering "
+            "and optional status/product filters are applied."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="status",
+                location=OpenApiParameter.QUERY,
+                required=False,
+                type=str,
+                enum=list(DEFECT_STATUS_VALUES),
+                description="Filter by defect lifecycle status.",
+            ),
+            OpenApiParameter(
+                name="product_id",
+                location=OpenApiParameter.QUERY,
+                required=False,
+                type=str,
+                description="Filter to one product ID.",
+            ),
+        ],
+        responses={
+            200: OpenApiResponse(DefectListResponseSerializer, description="Visible defects returned."),
+            403: OpenApiResponse(
+                AuthenticationErrorResponseSerializer,
+                description="Authentication is missing or the user role is not allowed.",
+            ),
+        },
+    )
     def get(self, request):
         actor = actor_from_user(request.user)
         if not actor.is_owner and not actor.is_developer:
@@ -101,16 +239,6 @@ class DefectListApi(APIView):
         if product_id:
             queryset = queryset.filter(product_id=product_id)
 
-        owner_id = str(request.query_params.get("owner_id", "")).strip()
-        if owner_id:
-            if not actor.is_owner or owner_id != actor.actor_id:
-                return Response({"error": "owner_id must match authenticated Product Owner."}, status=status.HTTP_403_FORBIDDEN)
-
-        developer_id = str(request.query_params.get("developer_id", "")).strip()
-        if developer_id:
-            if not actor.is_developer or developer_id != actor.actor_id:
-                return Response({"error": "developer_id must match authenticated Developer."}, status=status.HTTP_403_FORBIDDEN)
-
         if actor.is_owner:
             queryset = queryset.filter(product__owner_id=actor.actor_id)
         else:
@@ -122,6 +250,33 @@ class DefectListApi(APIView):
 class DefectDetailApi(APIView):
     permission_classes = [IsAuthenticated]
 
+    @extend_schema(
+        operation_id="getDefectDetail",
+        summary="Get defect detail by report ID",
+        description=(
+            "Requires Swagger Authorize/basicAuth or a valid session cookie. "
+            "Retrieve detailed defect information by report_id. Product Owners can access defects in their own "
+            "products. Developers can access defects assigned to products they belong to, except defects still in "
+            "the New state."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="defect_id",
+                location=OpenApiParameter.PATH,
+                required=True,
+                type=str,
+                description="Defect report ID, for example BT-RP-2477.",
+            )
+        ],
+        responses={
+            200: OpenApiResponse(DefectDetailResponseSerializer, description="Defect detail returned."),
+            403: OpenApiResponse(
+                AuthenticationErrorResponseSerializer,
+                description="Authentication is missing or the user cannot access this defect.",
+            ),
+            404: OpenApiResponse(ErrorResponseSerializer, description="Defect does not exist or is outside the user's scope."),
+        },
+    )
     def get(self, request, defect_id):
         defect = DefectReport.objects.select_related("product").filter(report_id=defect_id).first()
         if defect is None:
@@ -147,6 +302,124 @@ class DefectActionApi(APIView):
     permission_classes = [IsAuthenticated]
 
     @transaction.atomic
+    @extend_schema(
+        operation_id="applyDefectAction",
+        summary="Apply workflow action to a defect",
+        description=(
+            "Requires Swagger Authorize/basicAuth or a valid session cookie. "
+            "Apply one lifecycle or comment action to a defect.\n\n"
+            "Action-specific payload rules:\n"
+            "- accept_open: Product Owner only; valid when status is New; requires severity and priority; backlog_ref optional.\n"
+            "- reject: Product Owner only; valid when status is New.\n"
+            "- duplicate: Product Owner only; valid when status is New; duplicate_of should be an existing root report ID such as BT-RP-1001.\n"
+            "- take_ownership: Developer only; valid when status is Open.\n"
+            "- set_fixed: Assigned developer only; valid when status is Assigned; fix_note optional.\n"
+            "- cannot_reproduce: Assigned developer only; valid when status is Assigned; fix_note optional.\n"
+            "- set_resolved: Product Owner only; valid when status is Fixed; retest_note optional.\n"
+            "- reopen: Product Owner only; valid when status is Fixed; retest_note is accepted as free text but is not currently enforced by the backend.\n"
+            "- add_comment: Authenticated Product Owner or Developer; comment must not be empty.\n\n"
+            "Field input rules:\n"
+            "- severity must be exactly one of High, Medium, Low.\n"
+            "- priority must be exactly one of P1, P2, P3.\n"
+            "- backlog_ref, fix_note, retest_note, and comment are free-text fields.\n"
+            "- duplicate_of should be an existing defect report ID, not a placeholder string.\n\n"
+            "Swagger UI keeps every request field editable. The example payloads are starter templates and can be "
+            "modified freely for testing."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="defect_id",
+                location=OpenApiParameter.PATH,
+                required=True,
+                type=str,
+                description="Defect report ID to transition.",
+            )
+        ],
+        request=DefectActionRequestDocSerializer,
+        responses={
+            200: OpenApiResponse(DefectActionResponseSerializer, description="Action applied."),
+            400: OpenApiResponse(ErrorResponseSerializer, description="Action is invalid for the payload or current status."),
+            403: OpenApiResponse(
+                AuthenticationErrorResponseSerializer,
+                description="Authentication is missing or the authenticated user cannot perform the action.",
+            ),
+            404: OpenApiResponse(ErrorResponseSerializer, description="Defect was not found."),
+        },
+        examples=[
+            OpenApiExample(
+                "Accept and open",
+                value={
+                    "action": "accept_open",
+                    "severity": "High",
+                    "priority": "P1",
+                    "backlog_ref": "BL-142",
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Reject",
+                value={
+                    "action": "reject",
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Mark duplicate",
+                value={
+                    "action": "duplicate",
+                    "duplicate_of": "BT-RP-1001",
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Take ownership",
+                value={
+                    "action": "take_ownership",
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Set fixed",
+                value={
+                    "action": "set_fixed",
+                    "fix_note": "Patched null export path.",
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Cannot reproduce",
+                value={
+                    "action": "cannot_reproduce",
+                    "fix_note": "Unable to reproduce on a clean install.",
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Set resolved",
+                value={
+                    "action": "set_resolved",
+                    "retest_note": "Retested successfully on build 1.4.2.",
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Reopen",
+                value={
+                    "action": "reopen",
+                    "retest_note": "Issue still occurs during regression testing.",
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Add comment",
+                value={
+                    "action": "add_comment",
+                    "comment": "Need logs from the failed export worker.",
+                },
+                request_only=True,
+            ),
+        ],
+    )
     def post(self, request, defect_id):
         defect = DefectReport.objects.select_related("product").filter(report_id=defect_id).first()
         if defect is None:
@@ -173,3 +446,47 @@ class DefectActionApi(APIView):
                 "status": defect.status,
             }
         )
+
+
+class DeveloperEffectivenessApi(APIView):
+    permission_classes = [IsAuthenticated]
+
+    @extend_schema(
+        operation_id="getDeveloperEffectiveness",
+        summary="Get developer effectiveness classification",
+        description=(
+            "Requires Swagger Authorize/basicAuth or a valid session cookie. "
+            "Only Product Owners can query effectiveness classification for developers in their teams. "
+            "Classification uses fixed count and reopened ratio. Thresholds are: fixed < 20 -> Insufficient data; "
+            "reopened/fixed < 1/32 -> Good; reopened/fixed < 1/8 -> Fair; otherwise -> Poor."
+        ),
+        parameters=[
+            OpenApiParameter(
+                name="developer_id",
+                location=OpenApiParameter.PATH,
+                required=True,
+                type=str,
+                description="Developer username to classify.",
+            )
+        ],
+        responses={
+            200: OpenApiResponse(DeveloperEffectivenessResponseSerializer, description="Effectiveness metric returned."),
+            400: OpenApiResponse(ErrorResponseSerializer, description="Developer is not in the owner's team or input is invalid."),
+            403: OpenApiResponse(
+                AuthenticationErrorResponseSerializer,
+                description="Authentication is missing or the authenticated user is not a Product Owner.",
+            ),
+        },
+    )
+    def get(self, request, developer_id):
+        actor = actor_from_user(request.user)
+        if not actor.is_owner:
+            return Response({"error": "Only product owners can view developer effectiveness."}, status=status.HTTP_403_FORBIDDEN)
+
+        try:
+            result = summarize_developer_effectiveness(actor.actor_id, developer_id)
+        except ValidationError as exc:
+            detail = exc.messages[0] if getattr(exc, "messages", None) else str(exc)
+            return Response({"error": detail}, status=status.HTTP_400_BAD_REQUEST)
+
+        return Response(result, status=status.HTTP_200_OK)

@@ -1,0 +1,48 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Platform Login - BetaTrax</title>
+    <link rel="stylesheet" href="{% static 'frontend/styles.css' %}" />
+    <link rel="stylesheet" href="{% static 'tenancy/platform.css' %}" />
+  </head>
+  <body>
+    <main class="layout narrow-layout">
+      <header class="topbar">
+        <div>
+          <div class="brand">BetaTrax Platform</div>
+          <div class="sub">Tenant administration</div>
+        </div>
+      </header>
+
+      {% if messages %}
+      <section class="flash-stack">
+        {% for message in messages %}
+        <div class="flash {% if message.tags == 'error' %}flash-error{% else %}flash-ok{% endif %}">{{ message }}</div>
+        {% endfor %}
+      </section>
+      {% endif %}
+
+      <section class="card">
+        <h1>Sign In</h1>
+        <form method="post" class="form-grid">
+          {% csrf_token %}
+          <input type="hidden" name="next" value="{{ next }}" />
+          <label class="field">
+            <span>Username</span>
+            <input name="username" autocomplete="username" required />
+          </label>
+          <label class="field">
+            <span>Password</span>
+            <input name="password" type="password" autocomplete="current-password" required />
+          </label>
+          <div class="actions">
+            <button class="primary" type="submit">Sign In</button>
+          </div>
+        </form>
+      </section>
+    </main>
+  </body>
+</html>

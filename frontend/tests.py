@@ -1,12 +1,15 @@
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
 from django.test import TestCase
 from django.urls import reverse
+from unittest import skipIf
 
 from defects.authz import ROLE_DEVELOPER, ROLE_OWNER
 from defects.models import DefectComment, DefectReport, DefectStatus, Product, ProductDeveloper
 
 
+@skipIf(settings.USE_DJANGO_TENANTS, "Single-schema frontend smoke tests run with ENABLE_DJANGO_TENANTS=False.")
 class FrontendSmokeTests(TestCase):
     password = "Pass1234!"
 

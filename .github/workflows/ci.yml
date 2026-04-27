@@ -50,9 +50,6 @@ jobs:
       - name: Run direct view tests with APIRequestFactory
         run: python manage.py test defects.testsuite.test_views_request_factory --verbosity 2
 
-      - name: Run discovered test suite
-        run: python manage.py test --verbosity 2
-
       - name: Verify defects.tests compatibility entrypoint
         run: python manage.py test defects.tests --verbosity 2
 

@@ -735,13 +735,20 @@ Supported `action` values:
 Action-specific fields:
 - `accept_open`: `severity` (`High|Medium|Low`), `priority` (`P1|P2|P3`), `backlog_ref` (optional)
 - `reject`: no additional field
-- `duplicate`: `duplicate_of` (optional)
+- `duplicate`: `duplicate_of` (existing defect report ID such as `BT-RP-1001`)
 - `take_ownership`: no additional field (assignee is current user)
 - `set_fixed`: `fix_note` (optional)
 - `cannot_reproduce`: `fix_note` (optional)
 - `set_resolved`: `retest_note` (optional)
 - `reopen`: `retest_note` (optional)
 - `add_comment`: `comment` (author is current user)
+
+Field value rules:
+- `severity` only accepts `High`, `Medium`, or `Low`. Passing `"string"` returns `400`.
+- `priority` only accepts `P1`, `P2`, or `P3`. Passing `"string"` returns `400`.
+- `duplicate_of` should be a real defect report ID. Passing `"string"` only works if a defect with report ID `string` actually exists; otherwise it returns `400`.
+- `backlog_ref`, `fix_note`, and `retest_note` are free-text fields, so `"string"` is accepted as normal text.
+- `comment` is also free text, but blank or whitespace-only values return `400`.
 
 Response `200`:
 

@@ -157,44 +157,69 @@ class DefectActionSerializer(serializers.Serializer):
 class DefectActionRequestDocSerializer(serializers.Serializer):
     action = serializers.ChoiceField(
         choices=DEFECT_ACTION_CHOICES,
-        help_text="Workflow action to apply. Field requirements depend on the selected action.",
+        help_text=(
+            "Workflow action to apply. Allowed values: accept_open, reject, duplicate, "
+            "take_ownership, set_fixed, cannot_reproduce, set_resolved, reopen, add_comment."
+        ),
     )
     severity = serializers.ChoiceField(
         choices=("High", "Medium", "Low"),
         required=False,
-        help_text="Required for accept_open.",
+        help_text=(
+            "Required for accept_open. Enum value only: High, Medium, or Low. "
+            "Arbitrary text such as 'string' is rejected with 400."
+        ),
     )
     priority = serializers.ChoiceField(
         choices=("P1", "P2", "P3"),
         required=False,
-        help_text="Required for accept_open.",
+        help_text=(
+            "Required for accept_open. Enum value only: P1, P2, or P3. "
+            "Arbitrary text such as 'string' is rejected with 400."
+        ),
     )
     backlog_ref = serializers.CharField(
         max_length=64,
         required=False,
         allow_blank=True,
-        help_text="Optional backlog or tracking reference used with accept_open.",
+        help_text=(
+            "Optional free-text backlog or tracking reference used with accept_open. "
+            "Plain strings are accepted."
+        ),
     )
     duplicate_of = serializers.CharField(
         max_length=32,
         required=False,
         allow_blank=True,
-        help_text="Required for duplicate. Root defect report ID to link against.",
+        help_text=(
+            "Used with duplicate. Enter an existing root defect report ID such as BT-RP-1001. "
+            "A placeholder like 'string' only works if a defect with that exact report ID exists; "
+            "otherwise the API returns 400."
+        ),
     )
     fix_note = serializers.CharField(
         required=False,
         allow_blank=True,
-        help_text="Optional implementation or investigation note for set_fixed and cannot_reproduce.",
+        help_text=(
+            "Optional free-text implementation or investigation note for set_fixed and "
+            "cannot_reproduce. Plain strings are accepted."
+        ),
     )
     retest_note = serializers.CharField(
         required=False,
         allow_blank=True,
-        help_text="Retest note used with set_resolved and reopen. Reopen requires a non-empty note.",
+        help_text=(
+            "Optional free-text retest note used with set_resolved and reopen. Plain strings are "
+            "accepted. The current backend does not reject an empty value for reopen."
+        ),
     )
     comment = serializers.CharField(
         required=False,
         allow_blank=True,
-        help_text="Comment body for add_comment. Must not be blank when add_comment is used.",
+        help_text=(
+            "Free-text comment body for add_comment. Plain strings are accepted, but blank or "
+            "whitespace-only values are rejected with 400."
+        ),
     )
 
 

@@ -64,23 +64,34 @@ class TenantModeIntegrationTests(TenantTestCase):
         user.groups.add(group)
         return user
 
-    def test_tenant_host_can_create_and_list_defects_inside_tenant_schema(self):
-        create_response = self.client.post(
+    def _create_defect(self, title="Tenant scoped bug", tester_id="tenant-tester"):
+        response = self.client.post(
             reverse("defects:api-create-defect"),
             {
                 "product_id": self.product.product_id,
                 "version": "2.0.0",
-                "title": "Tenant scoped bug",
+                "title": title,
                 "description": "Tenant-only defect",
                 "steps": "Open tenant app",
-                "tester_id": "tenant-tester",
+                "tester_id": tester_id,
             },
             format="json",
             HTTP_HOST=self.get_test_tenant_domain(),
         )
+        self.assertEqual(response.status_code, 201)
+        return response.json()["report_id"]
 
-        self.assertEqual(create_response.status_code, 201)
-        report_id = create_response.json()["report_id"]
+    def _action(self, defect_id, payload, user):
+        self.client.force_authenticate(user=user)
+        return self.client.post(
+            reverse("defects:api-defect-action", kwargs={"defect_id": defect_id}),
+            payload,
+            format="json",
+            HTTP_HOST=self.get_test_tenant_domain(),
+        )
+
+    def test_tenant_host_can_create_and_list_defects_inside_tenant_schema(self):
+        report_id = self._create_defect()
         self.assertTrue(DefectReport.objects.filter(report_id=report_id, status=DefectStatus.NEW).exists())
 
         self.client.force_authenticate(user=self.owner)
@@ -93,6 +104,88 @@ class TenantModeIntegrationTests(TenantTestCase):
         self.assertTrue(
             any(item["report_id"] == report_id for item in list_response.json()["items"])
         )
+
+    def test_tenant_lifecycle_actions_work_inside_tenant_schema(self):
+        defect_id = self._create_defect(title="Tenant lifecycle defect", tester_id="tenant-lifecycle")
+
+        accept_response = self._action(
+            defect_id,
+            {"action": "accept_open", "severity": "High", "priority": "P1"},
+            self.owner,
+        )
+        self.assertEqual(accept_response.status_code, 200)
+        self.assertEqual(accept_response.json()["status"], DefectStatus.OPEN)
+
+        take_response = self._action(defect_id, {"action": "take_ownership"}, self.developer)
+        self.assertEqual(take_response.status_code, 200)
+        self.assertEqual(take_response.json()["status"], DefectStatus.ASSIGNED)
+
+        fixed_response = self._action(
+            defect_id,
+            {"action": "set_fixed", "fix_note": "tenant patch applied"},
+            self.developer,
+        )
+        self.assertEqual(fixed_response.status_code, 200)
+        self.assertEqual(fixed_response.json()["status"], DefectStatus.FIXED)
+
+        reopen_response = self._action(
+            defect_id,
+            {"action": "reopen", "retest_note": "still reproducible in tenant env"},
+            self.owner,
+        )
+        self.assertEqual(reopen_response.status_code, 200)
+        self.assertEqual(reopen_response.json()["status"], DefectStatus.REOPENED)
+
+        defect = DefectReport.objects.get(report_id=defect_id)
+        self.assertEqual(defect.assignee_id, self.developer.username)
+        self.assertEqual(defect.status, DefectStatus.REOPENED)
+        self.assertEqual(defect.history.count(), 5)
+
+    def test_tenant_developer_cannot_view_new_defect_detail(self):
+        defect_id = self._create_defect(title="Tenant new detail", tester_id="tenant-detail")
+        self.client.force_authenticate(user=self.developer)
+
+        response = self.client.get(
+            reverse("defects:api-defect-detail", kwargs={"defect_id": defect_id}),
+            HTTP_HOST=self.get_test_tenant_domain(),
+        )
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("cannot access New", response.json()["error"])
+
+    def test_tenant_owner_can_query_developer_effectiveness(self):
+        for index in range(20):
+            defect_id = self._create_defect(
+                title=f"Tenant effectiveness {index}",
+                tester_id=f"tenant-effect-{index}",
+            )
+            accept_response = self._action(
+                defect_id,
+                {"action": "accept_open", "severity": "High", "priority": "P1"},
+                self.owner,
+            )
+            self.assertEqual(accept_response.status_code, 200)
+            take_response = self._action(defect_id, {"action": "take_ownership"}, self.developer)
+            self.assertEqual(take_response.status_code, 200)
+            fixed_response = self._action(
+                defect_id,
+                {"action": "set_fixed", "fix_note": f"tenant fix {index}"},
+                self.developer,
+            )
+            self.assertEqual(fixed_response.status_code, 200)
+
+        self.client.force_authenticate(user=self.owner)
+        response = self.client.get(
+            reverse("api-developer-effectiveness", kwargs={"developer_id": self.developer.username}),
+            HTTP_HOST=self.get_test_tenant_domain(),
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["developer_id"], self.developer.username)
+        self.assertEqual(body["fixed"], 20)
+        self.assertEqual(body["reopened"], 0)
+        self.assertEqual(body["classification"], "Good")
 
     def test_tenant_models_exist_in_tenant_schema_not_public_schema(self):
         tenant_tables = set(connection.introspection.table_names())

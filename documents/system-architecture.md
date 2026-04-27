@@ -202,6 +202,10 @@ request serializers, response serializers, examples, path/query parameter
 descriptions, and enums for defect actions, statuses, severity, priority, and
 developer effectiveness classification.
 
+Swagger UI exposes `basicAuth` and `cookieAuth` through the global `Authorize`
+button. Protected endpoints still show only their business parameters, such as
+`defect_id`; users must authorize before using `Execute` on those endpoints.
+
 ### `betatrax/public_urls.py`
 
 Public schema URL routing when tenant mode is enabled:

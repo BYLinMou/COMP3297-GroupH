@@ -63,7 +63,10 @@ class ProductRegisterApi(APIView):
     @extend_schema(
         operation_id="registerProduct",
         summary="Register product",
-        description="Only Product Owners can register a product and bind developer accounts in one request.",
+        description=(
+            "Requires Swagger Authorize/basicAuth or a valid session cookie. "
+            "Only Product Owners can register a product and bind developer accounts in one request."
+        ),
         request=ProductRegisterRequestSerializer,
         responses={
             201: OpenApiResponse(ProductRegisterResponseSerializer, description="Product registered."),
@@ -200,7 +203,10 @@ class DefectListApi(APIView):
     @extend_schema(
         operation_id="listDefects",
         summary="List defects",
-        description="List defects by filters. Product Owners and Developers have different visibility scopes.",
+        description=(
+            "Requires Swagger Authorize/basicAuth or a valid session cookie. "
+            "List defects by filters. Product Owners and Developers have different visibility scopes."
+        ),
         parameters=[
             OpenApiParameter(
                 name="status",
@@ -302,7 +308,10 @@ class DefectDetailApi(APIView):
     @extend_schema(
         operation_id="getDefectDetail",
         summary="Get defect detail",
-        description="Retrieve detailed defect information by report_id.",
+        description=(
+            "Requires Swagger Authorize/basicAuth or a valid session cookie. "
+            "Retrieve detailed defect information by report_id."
+        ),
         parameters=[
             OpenApiParameter(
                 name="defect_id",
@@ -372,6 +381,7 @@ class DefectActionApi(APIView):
         operation_id="applyDefectAction",
         summary="Apply defect action",
         description=(
+            "Requires Swagger Authorize/basicAuth or a valid session cookie. "
             "Apply one lifecycle or comment action to a defect. Supported actions: "
             + ", ".join(DEFECT_ACTION_CHOICES)
             + ". Role and current-status rules are enforced by the API."
@@ -481,6 +491,7 @@ class DeveloperEffectivenessApi(APIView):
         operation_id="getDeveloperEffectiveness",
         summary="Developer effectiveness",
         description=(
+            "Requires Swagger Authorize/basicAuth or a valid session cookie. "
             "Only Product Owners can query effectiveness classification for developers in their teams. "
             "Classification uses fixed count and reopened ratio."
         ),

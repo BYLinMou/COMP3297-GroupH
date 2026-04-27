@@ -585,6 +585,13 @@ When `drf-spectacular` is available, generated API docs are exposed at:
 - OpenAPI schema: `/api/schema/`
 - Swagger UI: `/api/docs/`
 
+To try protected endpoints in Swagger UI, click `Authorize` first and enter a
+Django username/password under `basicAuth`, or sign in through the web UI so the
+browser has a `sessionid` cookie for `cookieAuth`. Fields shown under
+`Parameters`, such as `defect_id`, are endpoint inputs only; they are not
+authentication fields. Executing protected endpoints without this authorization
+returns `403`.
+
 The generated schema includes concrete request and response bodies for the
 backend API endpoints:
 
@@ -828,6 +835,13 @@ The following limitations are present in the current Sprint 3 implementation:
 
 7. Generated API documentation is available only when `drf-spectacular` is installed.
   Without it, the core API still works but `/api/schema/` and `/api/docs/` are not exposed.
+
+8. Tenant-mode tests are split from the single-schema regression suite. With
+   `ENABLE_DJANGO_TENANTS=True`, tenant integration tests create a real test
+   tenant schema and verify tenant-scoped defect API access plus public-schema
+   tenant registration. Legacy single-schema defect/frontend tests are skipped
+   in that mode because their fixtures intentionally create tenant-scoped models
+   directly in the active schema.
 
 </details>
 

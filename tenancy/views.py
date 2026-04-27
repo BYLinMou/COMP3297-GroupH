@@ -44,6 +44,7 @@ class TenantRegisterApi(APIView):
         operation_id="registerTenant",
         summary="Register tenant",
         description=(
+            "Requires Swagger Authorize/basicAuth or a valid session cookie. "
             "Only platform admins can register tenants from the public schema. "
             "In tenant mode this creates the Tenant row, primary Domain row, and PostgreSQL schema."
         ),

@@ -317,8 +317,18 @@ if HAS_DRF_SPECTACULAR:
     REST_FRAMEWORK["DEFAULT_SCHEMA_CLASS"] = "drf_spectacular.openapi.AutoSchema"
     SPECTACULAR_SETTINGS = {
         "TITLE": "BetaTrax API",
-        "DESCRIPTION": "BetaTrax defect management API documentation",
+        "DESCRIPTION": (
+            "BetaTrax defect management API documentation.\n\n"
+            "Swagger UI authentication: before executing protected endpoints, click "
+            "Authorize and enter a Django username/password in the basicAuth section, "
+            "or sign in through the web UI so cookieAuth is available. Path/query "
+            "parameters such as defect_id are business parameters, not login fields. "
+            "Executing a protected endpoint without authorization returns 403."
+        ),
         "VERSION": "v3",
+        "SWAGGER_UI_SETTINGS": {
+            "persistAuthorization": True,
+        },
     }
 
 

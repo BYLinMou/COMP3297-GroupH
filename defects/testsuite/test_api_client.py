@@ -455,6 +455,110 @@ class DefectApiClientTests(DefectApiTestCase):
         self.assertEqual(wrong_developer_fixed.status_code, 400)
         self.assertIn("Only the assigned developer", wrong_developer_fixed.json()["error"])
 
+    def test_action_endpoint_rejects_invalid_accept_fixed_reopen_and_cannot_reproduce_payloads(self):
+        invalid_severity = self.api_post(
+            self.action_url(self.seed_defect.report_id),
+            {"action": "accept_open", "severity": "Critical", "priority": "P1"},
+            user=self.owner_user,
+        )
+        self.assertEqual(invalid_severity.status_code, 400)
+        self.assertIn("Severity must be High, Medium, or Low", invalid_severity.json()["error"])
+
+        invalid_priority = self.api_post(
+            self.action_url(self.seed_defect.report_id),
+            {"action": "accept_open", "severity": "High", "priority": "P9"},
+            user=self.owner_user,
+        )
+        self.assertEqual(invalid_priority.status_code, 400)
+        self.assertIn("Priority must be P1, P2, or P3", invalid_priority.json()["error"])
+
+        open_response = self.move_defect_to_open()
+        self.assertEqual(open_response.status_code, 200)
+        assigned_response = self.api_post(
+            self.action_url(self.seed_defect.report_id),
+            {"action": "take_ownership"},
+            user=self.dev_user,
+        )
+        self.assertEqual(assigned_response.status_code, 200)
+
+        owner_fixed = self.api_post(
+            self.action_url(self.seed_defect.report_id),
+            {"action": "set_fixed", "fix_note": "owner should fail"},
+            user=self.owner_user,
+        )
+        self.assertEqual(owner_fixed.status_code, 400)
+        self.assertIn("Only Developer role can set defect to Fixed", owner_fixed.json()["error"])
+
+        other_dev = self.create_user("dev-003", "dev003@example.com", self.developer_group)
+        ProductDeveloper.objects.get_or_create(product=self.product, developer_id=other_dev.username)
+        wrong_dev_cannot_repro = self.api_post(
+            self.action_url(self.seed_defect.report_id),
+            {"action": "cannot_reproduce", "fix_note": "wrong dev cannot repro"},
+            user=other_dev,
+        )
+        self.assertEqual(wrong_dev_cannot_repro.status_code, 400)
+        self.assertIn(
+            "Only the assigned developer may mark this defect Cannot Reproduce",
+            wrong_dev_cannot_repro.json()["error"],
+        )
+
+        fixed_response = self.api_post(
+            self.action_url(self.seed_defect.report_id),
+            {"action": "set_fixed", "fix_note": "patched by assignee"},
+            user=self.dev_user,
+        )
+        self.assertEqual(fixed_response.status_code, 200)
+
+        other_owner = self.create_user("owner-006", "owner006@example.com", self.owner_group)
+        wrong_owner_reopen = self.api_post(
+            self.action_url(self.seed_defect.report_id),
+            {"action": "reopen", "retest_note": "wrong owner reopen"},
+            user=other_owner,
+        )
+        self.assertEqual(wrong_owner_reopen.status_code, 400)
+        self.assertIn("Only the Product Owner can reopen", wrong_owner_reopen.json()["error"])
+
+    def test_action_endpoint_rejects_duplicate_by_wrong_owner_and_resolve_by_developer(self):
+        _, defect_id = self.create_defect(title="wrong-owner-duplicate", tester_id="tester-wrong-owner")
+        _, target_id = self.create_defect(title="wrong-owner-target", tester_id="tester-wrong-target")
+
+        other_owner = self.create_user("owner-007", "owner007@example.com", self.owner_group)
+        wrong_owner_duplicate = self.api_post(
+            self.action_url(defect_id),
+            {"action": "duplicate", "duplicate_of": target_id},
+            user=other_owner,
+        )
+        self.assertEqual(wrong_owner_duplicate.status_code, 400)
+        self.assertIn("Only the Product Owner can mark duplicate", wrong_owner_duplicate.json()["error"])
+
+        self.move_defect_to_fixed(defect_id)
+        developer_resolve = self.api_post(
+            self.action_url(defect_id),
+            {"action": "set_resolved", "retest_note": "developer should not resolve"},
+            user=self.dev_user,
+        )
+        self.assertEqual(developer_resolve.status_code, 400)
+        self.assertIn("Only Product Owner role can resolve", developer_resolve.json()["error"])
+
+    def test_list_with_unknown_status_returns_empty_result_for_owner(self):
+        response = self.api_get(
+            self.list_url,
+            user=self.owner_user,
+            params={"status": "not-a-real-status"},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["items"], [])
+
+    def test_developer_list_with_unknown_status_returns_empty_result(self):
+        self.move_defect_to_open()
+        response = self.api_get(
+            self.list_url,
+            user=self.dev_user,
+            params={"status": "not-a-real-status", "developer_id": self.dev_user.username},
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.json()["items"], [])
+
     def test_owner_can_add_comment_and_empty_comment_is_rejected(self):
         ok_response = self.api_post(
             self.action_url(self.seed_defect.report_id),
@@ -494,6 +598,22 @@ class DefectApiClientTests(DefectApiTestCase):
         )
         self.assertEqual(missing_action.status_code, 400)
         self.assertIn("action", missing_action.json()["error"])
+
+        blank_action = self.api_post(
+            self.action_url(self.seed_defect.report_id),
+            {"action": ""},
+            user=self.owner_user,
+        )
+        self.assertEqual(blank_action.status_code, 400)
+        self.assertIn("action", blank_action.json()["error"])
+
+        too_long_action = self.api_post(
+            self.action_url(self.seed_defect.report_id),
+            {"action": "x" * 65},
+            user=self.owner_user,
+        )
+        self.assertEqual(too_long_action.status_code, 400)
+        self.assertIn("action", too_long_action.json()["error"])
 
     def test_platform_admin_can_register_tenant(self):
         admin_user = self.create_user("platform-admin", "platform-admin@example.com")

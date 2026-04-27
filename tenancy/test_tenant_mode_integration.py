@@ -4,6 +4,7 @@ from unittest import skipUnless
 from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.contrib.auth.models import Group
+from django.core import mail
 from django.db import connection
 from django.test import override_settings
 from django.urls import reverse
@@ -64,7 +65,7 @@ class TenantModeIntegrationTests(TenantTestCase):
         user.groups.add(group)
         return user
 
-    def _create_defect(self, title="Tenant scoped bug", tester_id="tenant-tester"):
+    def _create_defect(self, title="Tenant scoped bug", tester_id="tenant-tester", email=""):
         response = self.client.post(
             reverse("defects:api-create-defect"),
             {
@@ -74,6 +75,7 @@ class TenantModeIntegrationTests(TenantTestCase):
                 "description": "Tenant-only defect",
                 "steps": "Open tenant app",
                 "tester_id": tester_id,
+                "email": email,
             },
             format="json",
             HTTP_HOST=self.get_test_tenant_domain(),
@@ -141,6 +143,146 @@ class TenantModeIntegrationTests(TenantTestCase):
         self.assertEqual(defect.status, DefectStatus.REOPENED)
         self.assertEqual(defect.history.count(), 5)
 
+    def test_tenant_owner_can_reject_and_mark_duplicate(self):
+        reject_id = self._create_defect(title="Tenant reject defect", tester_id="tenant-reject")
+        reject_response = self._action(reject_id, {"action": "reject"}, self.owner)
+        self.assertEqual(reject_response.status_code, 200)
+        self.assertEqual(reject_response.json()["status"], DefectStatus.REJECTED)
+
+        root_id = self._create_defect(title="Tenant root defect", tester_id="tenant-root")
+        duplicate_id = self._create_defect(title="Tenant duplicate defect", tester_id="tenant-duplicate")
+        duplicate_response = self._action(
+            duplicate_id,
+            {"action": "duplicate", "duplicate_of": root_id},
+            self.owner,
+        )
+        self.assertEqual(duplicate_response.status_code, 200)
+        self.assertEqual(duplicate_response.json()["status"], DefectStatus.DUPLICATE)
+        self.assertEqual(DefectReport.objects.get(report_id=duplicate_id).duplicate_of_id, root_id)
+
+    def test_tenant_assigned_developer_can_mark_cannot_reproduce(self):
+        defect_id = self._create_defect(title="Tenant cannot reproduce", tester_id="tenant-cannot")
+        accept_response = self._action(
+            defect_id,
+            {"action": "accept_open", "severity": "High", "priority": "P1"},
+            self.owner,
+        )
+        self.assertEqual(accept_response.status_code, 200)
+        take_response = self._action(defect_id, {"action": "take_ownership"}, self.developer)
+        self.assertEqual(take_response.status_code, 200)
+
+        cannot_repro_response = self._action(
+            defect_id,
+            {"action": "cannot_reproduce", "fix_note": "cannot reproduce in tenant qa"},
+            self.developer,
+        )
+        self.assertEqual(cannot_repro_response.status_code, 200)
+        self.assertEqual(cannot_repro_response.json()["status"], DefectStatus.CANNOT_REPRODUCE)
+
+    def test_tenant_list_filters_support_slug_status_values(self):
+        cannot_repro_id = self._create_defect(title="Tenant list cannot repro", tester_id="tenant-list-cannot")
+        self.client.force_authenticate(user=self.owner)
+        self._action(
+            cannot_repro_id,
+            {"action": "accept_open", "severity": "High", "priority": "P1"},
+            self.owner,
+        )
+        self._action(cannot_repro_id, {"action": "take_ownership"}, self.developer)
+        self._action(
+            cannot_repro_id,
+            {"action": "cannot_reproduce", "fix_note": "tenant list cannot repro"},
+            self.developer,
+        )
+
+        cannot_repro_list = self.client.get(
+            reverse("defects:api-list-defects"),
+            {"status": "cannot-reproduce"},
+            HTTP_HOST=self.get_test_tenant_domain(),
+        )
+        self.assertEqual(cannot_repro_list.status_code, 200)
+        self.assertTrue(any(item["report_id"] == cannot_repro_id for item in cannot_repro_list.json()["items"]))
+
+        reopened_id = self._create_defect(title="Tenant list reopened", tester_id="tenant-list-reopen")
+        self._action(
+            reopened_id,
+            {"action": "accept_open", "severity": "High", "priority": "P1"},
+            self.owner,
+        )
+        self._action(reopened_id, {"action": "take_ownership"}, self.developer)
+        self._action(reopened_id, {"action": "set_fixed", "fix_note": "tenant list fixed"}, self.developer)
+        self._action(
+            reopened_id,
+            {"action": "reopen", "retest_note": "tenant list reopened"},
+            self.owner,
+        )
+
+        reopened_list = self.client.get(
+            reverse("defects:api-list-defects"),
+            {"status": "reopened"},
+            HTTP_HOST=self.get_test_tenant_domain(),
+        )
+        self.assertEqual(reopened_list.status_code, 200)
+        self.assertTrue(any(item["report_id"] == reopened_id for item in reopened_list.json()["items"]))
+
+    def test_tenant_non_owner_cannot_query_effectiveness_and_outsider_cannot_view_detail(self):
+        defect_id = self._create_defect(title="Tenant outsider detail", tester_id="tenant-outsider")
+
+        outsider = self._create_user("tenant-outsider-dev", self.developer_group)
+        self.client.force_authenticate(user=outsider)
+        outsider_response = self.client.get(
+            reverse("defects:api-defect-detail", kwargs={"defect_id": defect_id}),
+            HTTP_HOST=self.get_test_tenant_domain(),
+        )
+        self.assertEqual(outsider_response.status_code, 403)
+
+        self.client.force_authenticate(user=self.developer)
+        developer_effectiveness = self.client.get(
+            reverse("api-developer-effectiveness", kwargs={"developer_id": self.developer.username}),
+            HTTP_HOST=self.get_test_tenant_domain(),
+        )
+        self.assertEqual(developer_effectiveness.status_code, 403)
+
+        self._action(
+            defect_id,
+            {"action": "accept_open", "severity": "High", "priority": "P1"},
+            self.owner,
+        )
+        self.client.force_authenticate(user=outsider)
+        outsider_open_detail = self.client.get(
+            reverse("defects:api-defect-detail", kwargs={"defect_id": defect_id}),
+            HTTP_HOST=self.get_test_tenant_domain(),
+        )
+        self.assertEqual(outsider_open_detail.status_code, 404)
+
+    def test_tenant_outsider_developer_cannot_list_open_or_reopened_defects(self):
+        outsider = self._create_user("tenant-outsider-list", self.developer_group)
+
+        open_id = self._create_defect(title="Tenant outsider open", tester_id="tenant-outsider-open")
+        self._action(open_id, {"action": "accept_open", "severity": "High", "priority": "P1"}, self.owner)
+
+        reopened_id = self._create_defect(title="Tenant outsider reopened", tester_id="tenant-outsider-reopened")
+        self._action(reopened_id, {"action": "accept_open", "severity": "High", "priority": "P1"}, self.owner)
+        self._action(reopened_id, {"action": "take_ownership"}, self.developer)
+        self._action(reopened_id, {"action": "set_fixed", "fix_note": "tenant outsider fixed"}, self.developer)
+        self._action(reopened_id, {"action": "reopen", "retest_note": "tenant outsider reopened"}, self.owner)
+
+        self.client.force_authenticate(user=outsider)
+        open_response = self.client.get(
+            reverse("defects:api-list-defects"),
+            {"status": "Open", "developer_id": outsider.username},
+            HTTP_HOST=self.get_test_tenant_domain(),
+        )
+        self.assertEqual(open_response.status_code, 200)
+        self.assertEqual(open_response.json()["items"], [])
+
+        reopened_response = self.client.get(
+            reverse("defects:api-list-defects"),
+            {"status": "reopened", "developer_id": outsider.username},
+            HTTP_HOST=self.get_test_tenant_domain(),
+        )
+        self.assertEqual(reopened_response.status_code, 200)
+        self.assertEqual(reopened_response.json()["items"], [])
+
     def test_tenant_developer_cannot_view_new_defect_detail(self):
         defect_id = self._create_defect(title="Tenant new detail", tester_id="tenant-detail")
         self.client.force_authenticate(user=self.developer)
@@ -186,6 +328,204 @@ class TenantModeIntegrationTests(TenantTestCase):
         self.assertEqual(body["fixed"], 20)
         self.assertEqual(body["reopened"], 0)
         self.assertEqual(body["classification"], "Good")
+
+    def test_tenant_root_status_change_notifies_duplicate_chain(self):
+        root_id = self._create_defect(
+            title="Tenant notify root",
+            tester_id="tenant-notify-root",
+            email="tenant-root@example.com",
+        )
+        duplicate_id = self._create_defect(
+            title="Tenant notify child",
+            tester_id="tenant-notify-child",
+            email="tenant-child@example.com",
+        )
+        duplicate_response = self._action(
+            duplicate_id,
+            {"action": "duplicate", "duplicate_of": root_id},
+            self.owner,
+        )
+        self.assertEqual(duplicate_response.status_code, 200)
+        mail.outbox.clear()
+
+        accept_response = self._action(
+            root_id,
+            {"action": "accept_open", "severity": "High", "priority": "P1"},
+            self.owner,
+        )
+        self.assertEqual(accept_response.status_code, 200)
+        self.assertEqual(len(mail.outbox), 2)
+        recipients = sorted(message.to[0] for message in mail.outbox)
+        self.assertEqual(recipients, ["tenant-child@example.com", "tenant-root@example.com"])
+
+    def test_tenant_invalid_accept_payload_and_wrong_actor_transitions(self):
+        defect_id = self._create_defect(title="Tenant invalid accept", tester_id="tenant-invalid-accept")
+
+        invalid_severity = self._action(
+            defect_id,
+            {"action": "accept_open", "severity": "Critical", "priority": "P1"},
+            self.owner,
+        )
+        self.assertEqual(invalid_severity.status_code, 400)
+        self.assertIn("Severity must be High, Medium, or Low", invalid_severity.json()["error"])
+
+        invalid_priority = self._action(
+            defect_id,
+            {"action": "accept_open", "severity": "High", "priority": "P9"},
+            self.owner,
+        )
+        self.assertEqual(invalid_priority.status_code, 400)
+        self.assertIn("Priority must be P1, P2, or P3", invalid_priority.json()["error"])
+
+        other_owner = self._create_user("tenant-other-owner", self.owner_group)
+        wrong_owner_accept = self._action(
+            defect_id,
+            {"action": "accept_open", "severity": "High", "priority": "P1"},
+            other_owner,
+        )
+        self.assertEqual(wrong_owner_accept.status_code, 400)
+        self.assertIn("Only the Product Owner can accept", wrong_owner_accept.json()["error"])
+
+        accept_response = self._action(
+            defect_id,
+            {"action": "accept_open", "severity": "High", "priority": "P1"},
+            self.owner,
+        )
+        self.assertEqual(accept_response.status_code, 200)
+
+        outsider_dev = self._create_user("tenant-outsider-action", self.developer_group)
+        outsider_take = self._action(defect_id, {"action": "take_ownership"}, outsider_dev)
+        self.assertEqual(outsider_take.status_code, 400)
+        self.assertIn("Only developers on the product team", outsider_take.json()["error"])
+
+    def test_tenant_multilevel_duplicate_chain_notifies_all_descendants(self):
+        root_id = self._create_defect(
+            title="Tenant chain root",
+            tester_id="tenant-chain-root",
+            email="tenant-chain-root@example.com",
+        )
+        child_id = self._create_defect(
+            title="Tenant chain child",
+            tester_id="tenant-chain-child",
+            email="tenant-chain-child@example.com",
+        )
+        grandchild_id = self._create_defect(
+            title="Tenant chain grandchild",
+            tester_id="tenant-chain-grandchild",
+            email="tenant-chain-grandchild@example.com",
+        )
+        self._action(child_id, {"action": "duplicate", "duplicate_of": root_id}, self.owner)
+        DefectReport.objects.filter(report_id=grandchild_id).update(duplicate_of_id=child_id)
+        mail.outbox.clear()
+
+        accept_response = self._action(
+            root_id,
+            {"action": "accept_open", "severity": "High", "priority": "P1"},
+            self.owner,
+        )
+        self.assertEqual(accept_response.status_code, 200)
+        recipients = sorted(message.to[0] for message in mail.outbox)
+        self.assertEqual(
+            recipients,
+            [
+                "tenant-chain-child@example.com",
+                "tenant-chain-grandchild@example.com",
+                "tenant-chain-root@example.com",
+            ],
+        )
+
+    def test_tenant_duplicate_chain_notifies_on_reject_and_reopen(self):
+        reject_root_id = self._create_defect(
+            title="Tenant reject root",
+            tester_id="tenant-reject-root",
+            email="tenant-reject-root@example.com",
+        )
+        reject_child_id = self._create_defect(
+            title="Tenant reject child",
+            tester_id="tenant-reject-child",
+            email="tenant-reject-child@example.com",
+        )
+        self._action(reject_child_id, {"action": "duplicate", "duplicate_of": reject_root_id}, self.owner)
+        mail.outbox.clear()
+        reject_response = self._action(reject_root_id, {"action": "reject"}, self.owner)
+        self.assertEqual(reject_response.status_code, 200)
+        reject_recipients = sorted(message.to[0] for message in mail.outbox)
+        self.assertEqual(reject_recipients, ["tenant-reject-child@example.com", "tenant-reject-root@example.com"])
+
+        reopen_root_id = self._create_defect(
+            title="Tenant reopen root",
+            tester_id="tenant-reopen-root",
+            email="tenant-reopen-root@example.com",
+        )
+        reopen_child_id = self._create_defect(
+            title="Tenant reopen child",
+            tester_id="tenant-reopen-child",
+            email="tenant-reopen-child@example.com",
+        )
+        self._action(reopen_child_id, {"action": "duplicate", "duplicate_of": reopen_root_id}, self.owner)
+        self._action(reopen_root_id, {"action": "accept_open", "severity": "High", "priority": "P1"}, self.owner)
+        self._action(reopen_root_id, {"action": "take_ownership"}, self.developer)
+        self._action(reopen_root_id, {"action": "set_fixed", "fix_note": "tenant reopen fixed"}, self.developer)
+        mail.outbox.clear()
+        reopen_response = self._action(
+            reopen_root_id,
+            {"action": "reopen", "retest_note": "tenant reopen retest failed"},
+            self.owner,
+        )
+        self.assertEqual(reopen_response.status_code, 200)
+        reopen_recipients = sorted(message.to[0] for message in mail.outbox)
+        self.assertEqual(reopen_recipients, ["tenant-reopen-child@example.com", "tenant-reopen-root@example.com"])
+
+    def test_tenant_non_root_duplicate_transition_does_not_notify_siblings(self):
+        root_id = self._create_defect(
+            title="Tenant sibling root",
+            tester_id="tenant-sibling-root",
+            email="tenant-sibling-root@example.com",
+        )
+        child_id = self._create_defect(
+            title="Tenant sibling child",
+            tester_id="tenant-sibling-child",
+            email="tenant-sibling-child@example.com",
+        )
+        sibling_id = self._create_defect(
+            title="Tenant sibling other",
+            tester_id="tenant-sibling-other",
+            email="tenant-sibling-other@example.com",
+        )
+        DefectReport.objects.filter(report_id=child_id).update(duplicate_of_id=root_id)
+        DefectReport.objects.filter(report_id=sibling_id).update(duplicate_of_id=root_id)
+
+        response = self._action(child_id, {"action": "duplicate", "duplicate_of": root_id}, self.owner)
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["tenant-sibling-child@example.com"])
+
+    def test_tenant_duplicate_without_email_is_skipped_in_chain_notification(self):
+        root_id = self._create_defect(
+            title="Tenant no-email root",
+            tester_id="tenant-no-email-root",
+            email="tenant-no-email-root@example.com",
+        )
+        duplicate_id = self._create_defect(
+            title="Tenant no-email child",
+            tester_id="tenant-no-email-child",
+            email="",
+        )
+        duplicate_response = self._action(
+            duplicate_id,
+            {"action": "duplicate", "duplicate_of": root_id},
+            self.owner,
+        )
+        self.assertEqual(duplicate_response.status_code, 200)
+
+        accept_response = self._action(
+            root_id,
+            {"action": "accept_open", "severity": "High", "priority": "P1"},
+            self.owner,
+        )
+        self.assertEqual(accept_response.status_code, 200)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertEqual(mail.outbox[0].to, ["tenant-no-email-root@example.com"])
 
     def test_tenant_models_exist_in_tenant_schema_not_public_schema(self):
         tenant_tables = set(connection.introspection.table_names())

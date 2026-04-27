@@ -402,18 +402,33 @@ API endpoint tests using `APITestCase` and `APIClient`.
     - Developer tries `reject` on `New` defect -> `400`
     - Owner tries `set_resolved` while defect is `Open` -> `400`
     - Wrong developer `dev-002` tries `set_fixed` on defect assigned to `dev-001` -> `400`
-28. `test_owner_can_add_comment_and_empty_comment_is_rejected`
+28. `test_action_endpoint_rejects_invalid_accept_fixed_reopen_and_cannot_reproduce_payloads`
+    - Owner `accept_open` with `severity="Critical"` -> `400`
+    - Owner `accept_open` with `priority="P9"` -> `400`
+    - Owner `set_fixed` on assigned defect -> `400`
+    - Wrong developer `dev-003` calls `cannot_reproduce` on defect assigned to `dev-001` -> `400`
+    - Wrong owner `owner-006` calls `reopen` on a `Fixed` defect owned by `owner-001` -> `400`
+29. `test_action_endpoint_rejects_duplicate_by_wrong_owner_and_resolve_by_developer`
+    - Wrong owner `owner-007` calls `duplicate` on another owner's defect -> `400`
+    - Developer `dev-001` calls `set_resolved` on `Fixed` defect -> `400`
+30. `test_list_with_unknown_status_returns_empty_result_for_owner`
+    - Owner query:
+      - `status=not-a-real-status`
+    - Expected:
+      - response `200`
+      - empty items list
+31. `test_owner_can_add_comment_and_empty_comment_is_rejected`
     - Valid comment:
       - `Need more repro info`
       - Expected message `Comment added.`
     - Blank comment `"   "` -> `400`
-29. `test_action_returns_404_and_serializer_errors`
+32. `test_action_returns_404_and_serializer_errors`
     - Missing defect id `BT-RP-9999` -> `404`
     - Missing `action` field -> `400`
 
 #### Product, tenant, effectiveness endpoints
 
-30. `test_product_owner_can_register_product`
+33. `test_product_owner_can_register_product`
     - Owner `owner-002`
     - Developer `dev-777`
     - Payload:
@@ -421,23 +436,23 @@ API endpoint tests using `APITestCase` and `APIClient`.
       - `name="New Product"`
       - `developers=["dev-777"]`
     - Expected: `201`, product + developer assignment created
-31. `test_owner_with_existing_product_cannot_register_again`
+34. `test_owner_with_existing_product_cannot_register_again`
     - Existing owner `owner-001`
     - Payload `product_id="Prod_3"`
     - Expected: `400`
-32. `test_developer_cannot_register_product`
+35. `test_developer_cannot_register_product`
     - Developer attempts product registration
     - Expected: `403`
-33. `test_register_product_returns_validation_error_detail`
+36. `test_register_product_returns_validation_error_detail`
     - Developers payload is string `"dev-001"` instead of list
     - Expected: `400`
-34. `test_register_product_rejects_blank_fields_and_unknown_or_assigned_developers`
+37. `test_register_product_rejects_blank_fields_and_unknown_or_assigned_developers`
     - Blank `product_id` -> `400`
     - Blank `name` -> `400`
     - Blank developer id `"   "` -> `400`
     - Missing developer `missing-dev` -> `400`
     - Already-assigned developer `dev-001` -> `400`
-35. `test_platform_admin_can_register_tenant`
+38. `test_platform_admin_can_register_tenant`
     - Superuser `platform-admin`
     - Valid tenant:
       - `schema_name="team_blue"`
@@ -445,20 +460,20 @@ API endpoint tests using `APITestCase` and `APIClient`.
       - `name="Team Blue"`
     - Expected: `201`
     - Duplicate schema `team_blue` with new domain -> `400`
-36. `test_platform_admin_register_tenant_requires_serializer_fields`
+39. `test_platform_admin_register_tenant_requires_serializer_fields`
     - Missing `schema_name`
     - Expected: `400`
-37. `test_non_platform_admin_cannot_register_tenant`
+40. `test_non_platform_admin_cannot_register_tenant`
     - Owner attempts tenant registration
     - Expected: `403`
-38. `test_product_owner_can_query_developer_effectiveness`
+41. `test_product_owner_can_query_developer_effectiveness`
     - Create one defect and move to `Fixed`
     - Owner GET effectiveness for `dev-001`
     - Expected:
       - `fixed=1`
       - `reopened=0`
       - classification `Insufficient data`
-39. `test_product_owner_can_query_effectiveness_good_fair_and_poor`
+42. `test_product_owner_can_query_effectiveness_good_fair_and_poor`
     - Separate owner/developer/product datasets:
       - `Good`: `fixed=20`, `reopened=0`
       - `Fair`: `fixed=32`, `reopened=1`, `reopen_ratio=1/32`
@@ -467,10 +482,10 @@ API endpoint tests using `APITestCase` and `APIClient`.
       - `Good`
       - `Fair`
       - `Poor`
-40. `test_developer_cannot_query_effectiveness`
+43. `test_developer_cannot_query_effectiveness`
     - Developer queries own effectiveness endpoint
     - Expected: `403`
-41. `test_effectiveness_rejects_non_team_developer`
+44. `test_effectiveness_rejects_non_team_developer`
     - Query `dev-999`
     - Expected: `400`
 
@@ -806,12 +821,77 @@ These tests only run when:
      - `fixed=20`
      - `reopened=0`
      - classification `Good`
-5. `test_tenant_models_exist_in_tenant_schema_not_public_schema`
+5. `test_tenant_owner_can_reject_and_mark_duplicate`
+   - Reject flow:
+     - create `Tenant reject defect`
+     - owner calls `reject`
+     - expected status `Rejected`
+   - Duplicate flow:
+     - create root defect
+     - create duplicate defect
+     - owner calls `duplicate` with `duplicate_of=root_id`
+     - expected status `Duplicate`
+     - DB `duplicate_of` set to root
+6. `test_tenant_assigned_developer_can_mark_cannot_reproduce`
+   - Create defect and move:
+     - `New -> Open -> Assigned`
+   - Developer calls:
+     - `action="cannot_reproduce"`
+     - `fix_note="cannot reproduce in tenant qa"`
+   - Expected:
+     - response `200`
+     - status `Cannot Reproduce`
+7. `test_tenant_list_filters_support_slug_status_values`
+   - Create one tenant defect moved to `Cannot Reproduce`
+   - List query:
+     - `status=cannot-reproduce`
+   - Expected: created defect appears
+   - Create one tenant defect moved to `Reopened`
+   - List query:
+     - `status=reopened`
+   - Expected: created defect appears
+8. `test_tenant_root_status_change_notifies_duplicate_chain`
+   - Root defect email:
+     - `tenant-root@example.com`
+   - Child duplicate email:
+     - `tenant-child@example.com`
+   - Root `accept_open` after child marked duplicate
+   - Expected:
+     - 2 emails
+     - recipients:
+       - `tenant-child@example.com`
+       - `tenant-root@example.com`
+9. `test_tenant_non_root_duplicate_transition_does_not_notify_siblings`
+   - Root defect with two linked children
+   - Child duplicate transition on non-root defect
+   - Expected:
+     - only 1 email
+     - recipient `tenant-sibling-child@example.com`
+10. `test_tenant_duplicate_without_email_is_skipped_in_chain_notification`
+    - Root defect email present
+    - Child duplicate email blank
+    - Root `accept_open`
+    - Expected:
+      - only root tester email sent
+11. `test_tenant_non_owner_cannot_query_effectiveness_and_outsider_cannot_view_detail`
+    - Outsider developer `tenant-outsider-dev` requests `New` defect detail -> `403`
+    - Developer `tenant-dev` queries own effectiveness endpoint -> `403`
+    - Same outsider requests detail again after defect becomes `Open` -> `404`
+12. `test_tenant_multilevel_duplicate_chain_notifies_all_descendants`
+    - Root defect with:
+      - child duplicate
+      - grandchild duplicate linked to child
+    - Root `accept_open`
+    - Expected email recipients:
+      - root tester
+      - child tester
+      - grandchild tester
+13. `test_tenant_models_exist_in_tenant_schema_not_public_schema`
    - In tenant schema:
      - table `defects_product` must exist
    - In public schema:
      - table `defects_product` must not exist
-6. `test_public_schema_can_register_tenant`
+14. `test_public_schema_can_register_tenant`
    - Public schema user:
      - username `platform-api-admin`
      - group `platform_admin`
@@ -836,31 +916,15 @@ This file does not define new cases. It re-exports:
 
 Its purpose is compatibility with CI commands importing `defects.tests` directly.
 
-## Remaining Recommended Additions
+## Conclution
 
-### A. Broader tenant-mode endpoint coverage
+The implemented automated test suite now covers:
 
-Tenant mode now covers lifecycle, detail visibility, and effectiveness, but it still lacks:
+- non-tenant mode
+- tenant mode
+- endpoint success paths
+- endpoint negative/permission paths
+- duplicate-chain notifications
+- developer effectiveness classification paths
 
-1. Duplicate flow inside tenant schema
-2. Reject flow inside tenant schema
-3. Cannot-reproduce flow inside tenant schema
-4. Tenant-mode list filter normalization (`cannot-reproduce`, `reopened`)
-
-### B. More endpoint-level negative coverage
-
-Useful remaining API assertions:
-
-1. `accept_open` with invalid `severity`
-2. `accept_open` with invalid `priority`
-3. `cannot_reproduce` by non-assignee developer
-4. `reopen` by wrong owner
-5. `set_fixed` by owner through HTTP endpoint
-
-### C. Tenant-mode notification and duplicate-chain behavior
-
-These are covered in service tests but not yet under real tenant schema execution:
-
-1. Root status change notifies duplicate chain
-2. Non-root duplicate transition does not notify siblings
-3. Duplicate without tester email is skipped
+Combined statement coverage and branch coverage are both `100.0%` across the tracked backend modules listed in the coverage report.

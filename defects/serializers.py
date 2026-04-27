@@ -32,18 +32,33 @@ class ErrorResponseSerializer(serializers.Serializer):
     error = serializers.JSONField(help_text="String message or serializer error object.")
 
 
+class AuthenticationErrorResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField(help_text="DRF authentication or permission failure message.")
+
+
 class MissingFieldsErrorResponseSerializer(serializers.Serializer):
     error = serializers.CharField()
     missing_fields = serializers.ListField(child=serializers.CharField())
 
 
+class DefectCreateBadRequestResponseSerializer(serializers.Serializer):
+    error = serializers.JSONField(
+        help_text="Either 'Missing required fields.' or a serializer field error object."
+    )
+    missing_fields = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        help_text="Present only when required create fields are missing or blank.",
+    )
+
+
 class ProductRegisterRequestSerializer(serializers.Serializer):
-    product_id = serializers.CharField(max_length=32)
-    name = serializers.CharField(max_length=128)
+    product_id = serializers.CharField(max_length=32, help_text="Business product identifier. Must be unique in the current scope.")
+    name = serializers.CharField(max_length=128, help_text="Human-readable product name.")
     developers = serializers.ListField(
         child=serializers.CharField(max_length=64),
         required=False,
-        help_text="Developer usernames to bind to the product.",
+        help_text="Optional list of developer usernames to bind to the product.",
     )
 
 
@@ -71,13 +86,13 @@ class DefectCreateSerializer(serializers.Serializer):
 
 
 class DefectCreateRequestDocSerializer(serializers.Serializer):
-    product_id = serializers.CharField(max_length=32)
-    version = serializers.CharField(max_length=64)
-    title = serializers.CharField(max_length=255)
-    description = serializers.CharField()
-    steps = serializers.CharField()
-    tester_id = serializers.CharField(max_length=64)
-    email = serializers.EmailField(required=False, allow_blank=True)
+    product_id = serializers.CharField(max_length=32, help_text="Target product ID. Must already exist.")
+    version = serializers.CharField(max_length=64, help_text="Affected product version reported by the tester.")
+    title = serializers.CharField(max_length=255, help_text="Short defect summary.")
+    description = serializers.CharField(help_text="Detailed defect description.")
+    steps = serializers.CharField(help_text="Steps to reproduce.")
+    tester_id = serializers.CharField(max_length=64, help_text="External tester identifier.")
+    email = serializers.EmailField(required=False, allow_blank=True, help_text="Optional tester email for notifications.")
 
 
 class DefectCreateResponseSerializer(serializers.Serializer):
@@ -140,14 +155,72 @@ class DefectActionSerializer(serializers.Serializer):
 
 
 class DefectActionRequestDocSerializer(serializers.Serializer):
-    action = serializers.ChoiceField(choices=DEFECT_ACTION_CHOICES)
-    severity = serializers.ChoiceField(choices=("High", "Medium", "Low"), required=False)
-    priority = serializers.ChoiceField(choices=("P1", "P2", "P3"), required=False)
-    backlog_ref = serializers.CharField(max_length=64, required=False, allow_blank=True)
-    duplicate_of = serializers.CharField(max_length=32, required=False, allow_blank=True)
-    fix_note = serializers.CharField(required=False, allow_blank=True)
-    retest_note = serializers.CharField(required=False, allow_blank=True)
-    comment = serializers.CharField(required=False, allow_blank=True)
+    action = serializers.ChoiceField(
+        choices=DEFECT_ACTION_CHOICES,
+        help_text=(
+            "Workflow action to apply. Allowed values: accept_open, reject, duplicate, "
+            "take_ownership, set_fixed, cannot_reproduce, set_resolved, reopen, add_comment."
+        ),
+    )
+    severity = serializers.ChoiceField(
+        choices=("High", "Medium", "Low"),
+        required=False,
+        help_text=(
+            "Required for accept_open. Enum value only: High, Medium, or Low. "
+            "Arbitrary text such as 'string' is rejected with 400."
+        ),
+    )
+    priority = serializers.ChoiceField(
+        choices=("P1", "P2", "P3"),
+        required=False,
+        help_text=(
+            "Required for accept_open. Enum value only: P1, P2, or P3. "
+            "Arbitrary text such as 'string' is rejected with 400."
+        ),
+    )
+    backlog_ref = serializers.CharField(
+        max_length=64,
+        required=False,
+        allow_blank=True,
+        help_text=(
+            "Optional free-text backlog or tracking reference used with accept_open. "
+            "Plain strings are accepted."
+        ),
+    )
+    duplicate_of = serializers.CharField(
+        max_length=32,
+        required=False,
+        allow_blank=True,
+        help_text=(
+            "Used with duplicate. Enter an existing root defect report ID such as BT-RP-1001. "
+            "A placeholder like 'string' only works if a defect with that exact report ID exists; "
+            "otherwise the API returns 400."
+        ),
+    )
+    fix_note = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text=(
+            "Optional free-text implementation or investigation note for set_fixed and "
+            "cannot_reproduce. Plain strings are accepted."
+        ),
+    )
+    retest_note = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text=(
+            "Optional free-text retest note used with set_resolved and reopen. Plain strings are "
+            "accepted. The current backend does not reject an empty value for reopen."
+        ),
+    )
+    comment = serializers.CharField(
+        required=False,
+        allow_blank=True,
+        help_text=(
+            "Free-text comment body for add_comment. Plain strings are accepted, but blank or "
+            "whitespace-only values are rejected with 400."
+        ),
+    )
 
 
 class DefectActionResponseSerializer(serializers.Serializer):

@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from defects.authz import actor_from_user
-from defects.serializers import ErrorResponseSerializer
+from defects.serializers import AuthenticationErrorResponseSerializer, ErrorResponseSerializer
 
 from .models import Tenant
 from .serializers import TenantRegisterResponseSerializer, TenantRegisterSerializer
@@ -21,7 +21,6 @@ from .utils import is_public_schema_context
 try:
     from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema
 except Exception:  # pragma: no cover - optional dependency fallback
-
     class OpenApiExample:  # type: ignore[override]
         def __init__(self, *args, **kwargs):
             pass
@@ -42,38 +41,32 @@ class TenantRegisterApi(APIView):
 
     @extend_schema(
         operation_id="registerTenant",
-        summary="Register tenant",
+        summary="Register tenant from public schema",
         description=(
             "Requires Swagger Authorize/basicAuth or a valid session cookie. "
             "Only platform admins can register tenants from the public schema. "
-            "In tenant mode this creates the Tenant row, primary Domain row, and PostgreSQL schema."
+            "In tenant mode this creates the Tenant row, primary Domain row, and PostgreSQL schema. "
+            "The request example is a starter template and can be edited freely."
         ),
         request=TenantRegisterSerializer,
         responses={
             201: OpenApiResponse(TenantRegisterResponseSerializer, description="Tenant registered."),
             400: OpenApiResponse(ErrorResponseSerializer, description="Validation failed."),
-            403: OpenApiResponse(ErrorResponseSerializer, description="Authenticated user is not a platform admin."),
+            403: OpenApiResponse(
+                AuthenticationErrorResponseSerializer,
+                description="Authentication is missing or the authenticated user is not a platform admin.",
+            ),
             404: OpenApiResponse(ErrorResponseSerializer, description="Endpoint was called outside the public schema."),
         },
         examples=[
             OpenApiExample(
-                "Register tenant example",
-                value={"schema_name": "team_a", "domain": "team-a.betatrax.local", "name": "Team A"},
-                request_only=True,
-            ),
-            OpenApiExample(
-                "Register tenant response",
+                "Register tenant template",
                 value={
-                    "message": "Tenant registered successfully.",
-                    "tenant": {
-                        "schema_name": "team_a",
-                        "domain": "team-a.betatrax.local",
-                        "name": "Team A",
-                        "is_active": True,
-                    },
+                    "schema_name": "team_a",
+                    "domain": "team-a.betatrax.local",
+                    "name": "Team A",
                 },
-                response_only=True,
-                status_codes=["201"],
+                request_only=True,
             )
         ],
     )

@@ -690,8 +690,6 @@ Responses:
 - Query params (all optional):
   - `status` (for example `New`, `Open`, `Assigned`, `Fixed`, `Resolved`)
   - `product_id`
-  - `owner_id` (must match logged-in Product Owner username)
-  - `developer_id` (must match logged-in Developer username)
 
 Response `200`:
 

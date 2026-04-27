@@ -62,7 +62,7 @@ class DefectApiClientTests(DefectApiTestCase):
         response = self.api_get(
             self.list_url,
             user=self.dev_user,
-            params={"status": "Open", "developer_id": self.dev_user.username},
+            params={"status": "Open"},
         )
         self.assertEqual(response.status_code, 200)
         items = response.json()["items"]
@@ -74,31 +74,13 @@ class DefectApiClientTests(DefectApiTestCase):
         self.assertEqual(response.status_code, 403)
         self.assertIn("Only Product Owner or Developer", response.json()["error"])
 
-    def test_list_enforces_owner_and_developer_query_scope(self):
-        owner_scope_response = self.api_get(
-            self.list_url,
-            user=self.owner_user,
-            params={"owner_id": "owner-999"},
-        )
-        self.assertEqual(owner_scope_response.status_code, 403)
-        self.assertIn("owner_id must match", owner_scope_response.json()["error"])
-
-        developer_scope_response = self.api_get(
-            self.list_url,
-            user=self.dev_user,
-            params={"developer_id": "dev-999"},
-        )
-        self.assertEqual(developer_scope_response.status_code, 403)
-        self.assertIn("developer_id must match", developer_scope_response.json()["error"])
-
-    def test_list_allows_matching_owner_and_developer_scope_filters(self):
+    def test_list_uses_authenticated_scope_without_owner_or_developer_filters(self):
         self.seed_defect.status = DefectStatus.OPEN
         self.seed_defect.save(update_fields=["status"])
 
         owner_response = self.api_get(
             self.list_url,
             user=self.owner_user,
-            params={"owner_id": self.owner_user.username},
         )
         self.assertEqual(owner_response.status_code, 200)
         self.assertEqual(len(owner_response.json()["items"]), 1)
@@ -106,7 +88,6 @@ class DefectApiClientTests(DefectApiTestCase):
         developer_response = self.api_get(
             self.list_url,
             user=self.dev_user,
-            params={"developer_id": self.dev_user.username},
         )
         self.assertEqual(developer_response.status_code, 200)
         self.assertEqual(len(developer_response.json()["items"]), 1)

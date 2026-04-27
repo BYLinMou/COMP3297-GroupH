@@ -174,20 +174,6 @@ class DefectListApi(APIView):
                 type=str,
                 description="Filter to one product ID.",
             ),
-            OpenApiParameter(
-                name="owner_id",
-                location=OpenApiParameter.QUERY,
-                required=False,
-                type=str,
-                description="Product Owner username. Must match the authenticated owner.",
-            ),
-            OpenApiParameter(
-                name="developer_id",
-                location=OpenApiParameter.QUERY,
-                required=False,
-                type=str,
-                description="Developer username. Must match the authenticated developer.",
-            ),
         ],
         responses={
             200: OpenApiResponse(DefectListResponseSerializer, description="Visible defects returned."),
@@ -211,16 +197,6 @@ class DefectListApi(APIView):
         product_id = str(request.query_params.get("product_id", "")).strip()
         if product_id:
             queryset = queryset.filter(product_id=product_id)
-
-        owner_id = str(request.query_params.get("owner_id", "")).strip()
-        if owner_id:
-            if not actor.is_owner or owner_id != actor.actor_id:
-                return Response({"error": "owner_id must match authenticated Product Owner."}, status=status.HTTP_403_FORBIDDEN)
-
-        developer_id = str(request.query_params.get("developer_id", "")).strip()
-        if developer_id:
-            if not actor.is_developer or developer_id != actor.actor_id:
-                return Response({"error": "developer_id must match authenticated Developer."}, status=status.HTTP_403_FORBIDDEN)
 
         if actor.is_owner:
             queryset = queryset.filter(product__owner_id=actor.actor_id)

@@ -15,6 +15,7 @@ Non-tenant SQLite job:
 - `python manage.py test defects.testsuite.test_services frontend.tests --verbosity 2`
 - `python manage.py test defects.testsuite.test_api_client --verbosity 2`
 - `python manage.py test defects.testsuite.test_views_request_factory --verbosity 2`
+- `python manage.py test defects.testsuite.test_effectiveness --verbosity 2`
 - `python manage.py test defects.tests --verbosity 2`
 - `python -m coverage run --branch manage.py test`
 - `python -m coverage report`

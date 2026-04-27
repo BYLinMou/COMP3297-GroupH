@@ -198,9 +198,11 @@ Tenant URL routing:
 | `/` and frontend paths | `frontend.urls` |
 
 The tenant URL schema documents all tenant-scoped backend APIs with explicit
-request serializers, response serializers, examples, path/query parameter
-descriptions, and enums for defect actions, statuses, severity, priority, and
-developer effectiveness classification.
+request serializers, response serializers, path/query parameter descriptions,
+action rules, and enums for defect actions, statuses, severity, priority, and
+developer effectiveness classification. Swagger request bodies remain editable
+so manual testers can enter arbitrary payloads without replacing hard-coded
+examples first.
 
 Swagger UI exposes `basicAuth` and `cookieAuth` through the global `Authorize`
 button. Protected endpoints still show only their business parameters, such as

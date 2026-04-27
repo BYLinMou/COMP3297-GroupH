@@ -35,6 +35,27 @@ class ApiSchemaDocumentationTests(TestCase):
         for action in ("accept_open", "reject", "duplicate", "cannot_reproduce", "reopen", "add_comment"):
             self.assertIn(action, action_values)
 
+    def test_schema_descriptions_explain_rules_without_request_examples(self):
+        schema = SchemaGenerator(urlconf="betatrax.urls").get_schema(request=None, public=True)
+        paths = schema["paths"]
+
+        action_operation = paths["/api/defects/{defect_id}/actions/"]["post"]
+        tenant_operation = paths["/api/tenants/register/"]["post"]
+        product_operation = paths["/api/products/register/"]["post"]
+
+        self.assertEqual(action_operation["summary"], "Apply workflow action to a defect")
+        self.assertIn("Action-specific payload rules", action_operation["description"])
+        self.assertIn("Swagger UI keeps every request field editable", action_operation["description"])
+        self.assertNotIn("examples", action_operation["requestBody"]["content"]["application/json"])
+
+        self.assertEqual(tenant_operation["summary"], "Register tenant from public schema")
+        self.assertIn("fully editable in Swagger UI", tenant_operation["description"])
+        self.assertNotIn("examples", tenant_operation["requestBody"]["content"]["application/json"])
+
+        self.assertEqual(product_operation["summary"], "Register product in current tenant")
+        self.assertIn("no preset example payload is required", product_operation["description"])
+        self.assertNotIn("examples", product_operation["requestBody"]["content"]["application/json"])
+
     def test_schema_documents_swagger_auth_for_protected_endpoints(self):
         schema = SchemaGenerator(urlconf="betatrax.urls").get_schema(request=None, public=True)
         security_schemes = schema["components"]["securitySchemes"]

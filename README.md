@@ -600,7 +600,12 @@ backend API endpoints:
 - Tenant registration
 - Developer effectiveness classification
 
-Defect action documentation includes request examples for `accept_open`,
+Swagger request bodies are intentionally left fully editable for manual testing.
+The documentation focuses on field descriptions, role rules, lifecycle
+preconditions, and response shapes instead of hard-coded example payloads that
+need to be overwritten before every test.
+
+Defect action documentation explains the workflow rules for `accept_open`,
 `reject`, `duplicate`, `take_ownership`, `set_fixed`, `cannot_reproduce`,
 `set_resolved`, `reopen`, and `add_comment`. Lifecycle status, severity,
 priority, action, and developer classification values are documented as OpenAPI

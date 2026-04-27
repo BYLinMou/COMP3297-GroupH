@@ -10,9 +10,10 @@ Start here for deeper project details:
 
 - [System architecture](documents/system-architecture.md)
 - [Automated testing](documents/automated-testing.md)
+- [Test case inventory](documents/testcase.md)
 - [Tenant usage](documents/tenant-usage.md)
 
-## Demo Website
+## Demo Website (Tenant Mode)
 
 - Demo website (public schema): [betatrax.zeabur.app](https://betatrax.zeabur.app)
 - Demo website (public schema) 2 (backup): [betatrax.yeelam.site](https://betatrax.yeelam.site)
@@ -28,18 +29,23 @@ Start here for deeper project details:
 This repository currently uses three GitHub Actions workflows:
 
 1. **CI check** (`.github/workflows/ci.yml`)
-Runs on every push and pull request to validate functionality with:
-- `python manage.py check`
-- `python manage.py makemigrations --check --dry-run`
-- `python manage.py test defects.testsuite.test_services frontend.tests --verbosity 2`
-- `python manage.py test defects.testsuite.test_api_client --verbosity 2`
-- `python manage.py test defects.testsuite.test_views_request_factory --verbosity 2`
-- `python manage.py test --verbosity 2`
-- `python manage.py test defects.tests --verbosity 2`
-- `python -m coverage run --branch manage.py test`
-- `python -m coverage report`
-- `python -m coverage xml -o coverage.xml`
-- `python -m coverage html`
+Runs on every push and pull request (except changes only in `README.md` / `AGENTS.md`) and contains two jobs:
+
+- `django-checks` (non-tenant, SQLite):
+  - `python manage.py check`
+  - `python manage.py makemigrations --check --dry-run`
+  - `python manage.py test defects.testsuite.test_services frontend.tests --verbosity 2`
+  - `python manage.py test defects.testsuite.test_api_client --verbosity 2`
+  - `python manage.py test defects.testsuite.test_views_request_factory --verbosity 2`
+  - `python manage.py test defects.tests --verbosity 2`
+  - `python -m coverage run --branch manage.py test`
+  - `python -m coverage report`
+  - `python -m coverage xml -o coverage.xml`
+  - `python -m coverage html`
+
+- `tenant-mode-tests` (tenant mode, PostgreSQL):
+  - `python manage.py check`
+  - `python manage.py test --verbosity 2`
 
 The CI workflow uploads `coverage.xml` and `htmlcov/` as a `coverage-report` artifact.
 This is the current Sprint 3 automated testing baseline.
@@ -231,7 +237,10 @@ accounts when creating new tenants.
 
 ## Automated Testing
 
-Sprint 3 testing now uses Django's built-in test runner, Django REST Framework test utilities, and `coverage.py`.
+Sprint 3 testing uses Django's built-in test runner, Django REST Framework test utilities, and `coverage.py`.
+
+For a concrete inventory of implemented test cases, see [documents/testcase.md](documents/testcase.md).
+For CI details and testing conventions, see [documents/automated-testing.md](documents/automated-testing.md).
 
 ### Test layout
 
@@ -245,45 +254,45 @@ Sprint 3 testing now uses Django's built-in test runner, Django REST Framework t
   Service-layer tests for status transition and registration logic
 - `defects/testsuite/test_effectiveness.py`
   Branch/statement coverage tests for developer effectiveness classification rules
+- `betatrax/test_api_schema.py`
+  OpenAPI schema regression tests (operation IDs / enums / response schema shape)
+- `tenancy/test_tenant_mode_integration.py`
+  Tenant-mode integration tests (PostgreSQL + `django-tenants`) for tenant registration and tenant-scoped defect API access
 - `frontend/tests.py`
   Smoke tests for key HTML flows
 
 <details>
 <summary><strong>Local commands</strong></summary>
 
-Run the full discovered suite:
+Run the same non-tenant checks used by the CI `django-checks` job:
+
+```bash
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py test defects.testsuite.test_services frontend.tests --verbosity 2
+python manage.py test defects.testsuite.test_api_client --verbosity 2
+python manage.py test defects.testsuite.test_views_request_factory --verbosity 2
+python manage.py test defects.tests --verbosity 2
+python -m coverage run --branch manage.py test
+python -m coverage report
+python -m coverage xml -o coverage.xml
+python -m coverage html
+```
+
+Run the full discovered non-tenant suite:
 
 ```bash
 python manage.py test --verbosity 2
 ```
 
-Run the unit/frontend layer explicitly:
+Run focused test layers:
 
 ```bash
 python manage.py test defects.testsuite.test_services frontend.tests --verbosity 2
-```
-
-Run endpoint tests with DRF `APIClient`:
-
-```bash
 python manage.py test defects.testsuite.test_api_client --verbosity 2
-```
-
-Run direct view tests with `APIRequestFactory`:
-
-```bash
 python manage.py test defects.testsuite.test_views_request_factory --verbosity 2
-```
-
-Run effectiveness classification tests explicitly:
-
-```bash
 python manage.py test defects.testsuite.test_effectiveness --verbosity 2
-```
-
-Run the compatibility entrypoint explicitly:
-
-```bash
+python manage.py test betatrax.test_api_schema --verbosity 2
 python manage.py test defects.tests --verbosity 2
 ```
 
@@ -296,13 +305,20 @@ python -m coverage xml -o coverage.xml
 python -m coverage html
 ```
 
+Run the tenant-mode integration suite (requires PostgreSQL and `django-tenants`):
+
+```bash
+export ENABLE_DJANGO_TENANTS=True
+export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/betatrax
+python manage.py check
+python manage.py test --verbosity 2
+```
+
 Coverage configuration is stored in `.coveragerc`.
 Generated artifacts are:
 
 - `coverage.xml`
 - `htmlcov/index.html`
-
-For implementation details and conventions, see [documents/automated-testing.md](documents/automated-testing.md).
 
 </details>
 

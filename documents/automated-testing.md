@@ -2,6 +2,8 @@
 
 This project now uses Django's built-in test runner together with Django REST Framework test utilities and `coverage.py`.
 
+For the concrete test case inventory (what each test file covers), refer to `documents/testcase.md`.
+
 ## CI workflow
 
 The GitHub Actions CI workflow in `.github/workflows/ci.yml` currently performs these checks:
@@ -13,7 +15,6 @@ Non-tenant SQLite job:
 - `python manage.py test defects.testsuite.test_services frontend.tests --verbosity 2`
 - `python manage.py test defects.testsuite.test_api_client --verbosity 2`
 - `python manage.py test defects.testsuite.test_views_request_factory --verbosity 2`
-- `python manage.py test --verbosity 2`
 - `python manage.py test defects.tests --verbosity 2`
 - `python -m coverage run --branch manage.py test`
 - `python -m coverage report`

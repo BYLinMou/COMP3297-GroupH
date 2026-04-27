@@ -8,10 +8,12 @@ from .authz import actor_from_user
 from .models import DefectReport, Product
 from django.core.exceptions import ValidationError
 from .serializers import (
+    AuthenticationErrorResponseSerializer,
     DEFECT_ACTION_CHOICES,
     DEFECT_STATUS_VALUES,
     DefectActionRequestDocSerializer,
     DefectActionResponseSerializer,
+    DefectCreateBadRequestResponseSerializer,
     DefectActionSerializer,
     DefectCreateRequestDocSerializer,
     DefectCreateResponseSerializer,
@@ -69,7 +71,10 @@ class ProductRegisterApi(APIView):
         responses={
             201: OpenApiResponse(ProductRegisterResponseSerializer, description="Product registered."),
             400: OpenApiResponse(ErrorResponseSerializer, description="Validation failed."),
-            403: OpenApiResponse(ErrorResponseSerializer, description="Authenticated user is not a Product Owner."),
+            403: OpenApiResponse(
+                AuthenticationErrorResponseSerializer,
+                description="Authentication is missing or the authenticated user is not a Product Owner.",
+            ),
         },
     )
     def post(self, request):
@@ -104,7 +109,10 @@ class DefectCreateApi(APIView):
         request=DefectCreateRequestDocSerializer,
         responses={
             201: OpenApiResponse(DefectCreateResponseSerializer, description="Defect submitted."),
-            400: OpenApiResponse(MissingFieldsErrorResponseSerializer, description="Required field is missing or blank."),
+            400: OpenApiResponse(
+                DefectCreateBadRequestResponseSerializer,
+                description="Required fields are missing/blank or serializer validation failed.",
+            ),
             404: OpenApiResponse(ErrorResponseSerializer, description="Product ID was not found."),
         },
     )
@@ -177,7 +185,10 @@ class DefectListApi(APIView):
         ],
         responses={
             200: OpenApiResponse(DefectListResponseSerializer, description="Visible defects returned."),
-            403: OpenApiResponse(ErrorResponseSerializer, description="User role or filter is not allowed."),
+            403: OpenApiResponse(
+                AuthenticationErrorResponseSerializer,
+                description="Authentication is missing or the user role is not allowed.",
+            ),
         },
     )
     def get(self, request):
@@ -229,7 +240,10 @@ class DefectDetailApi(APIView):
         ],
         responses={
             200: OpenApiResponse(DefectDetailResponseSerializer, description="Defect detail returned."),
-            403: OpenApiResponse(ErrorResponseSerializer, description="User cannot access this defect."),
+            403: OpenApiResponse(
+                AuthenticationErrorResponseSerializer,
+                description="Authentication is missing or the user cannot access this defect.",
+            ),
             404: OpenApiResponse(ErrorResponseSerializer, description="Defect does not exist or is outside the user's scope."),
         },
     )
@@ -292,7 +306,10 @@ class DefectActionApi(APIView):
         responses={
             200: OpenApiResponse(DefectActionResponseSerializer, description="Action applied."),
             400: OpenApiResponse(ErrorResponseSerializer, description="Action is invalid for the payload or current status."),
-            403: OpenApiResponse(ErrorResponseSerializer, description="Authenticated user cannot perform the action."),
+            403: OpenApiResponse(
+                AuthenticationErrorResponseSerializer,
+                description="Authentication is missing or the authenticated user cannot perform the action.",
+            ),
             404: OpenApiResponse(ErrorResponseSerializer, description="Defect was not found."),
         },
     )
@@ -348,7 +365,10 @@ class DeveloperEffectivenessApi(APIView):
         responses={
             200: OpenApiResponse(DeveloperEffectivenessResponseSerializer, description="Effectiveness metric returned."),
             400: OpenApiResponse(ErrorResponseSerializer, description="Developer is not in the owner's team or input is invalid."),
-            403: OpenApiResponse(ErrorResponseSerializer, description="Authenticated user is not a Product Owner."),
+            403: OpenApiResponse(
+                AuthenticationErrorResponseSerializer,
+                description="Authentication is missing or the authenticated user is not a Product Owner.",
+            ),
         },
     )
     def get(self, request, developer_id):

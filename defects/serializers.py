@@ -32,9 +32,24 @@ class ErrorResponseSerializer(serializers.Serializer):
     error = serializers.JSONField(help_text="String message or serializer error object.")
 
 
+class AuthenticationErrorResponseSerializer(serializers.Serializer):
+    detail = serializers.CharField(help_text="DRF authentication or permission failure message.")
+
+
 class MissingFieldsErrorResponseSerializer(serializers.Serializer):
     error = serializers.CharField()
     missing_fields = serializers.ListField(child=serializers.CharField())
+
+
+class DefectCreateBadRequestResponseSerializer(serializers.Serializer):
+    error = serializers.JSONField(
+        help_text="Either 'Missing required fields.' or a serializer field error object."
+    )
+    missing_fields = serializers.ListField(
+        child=serializers.CharField(),
+        required=False,
+        help_text="Present only when required create fields are missing or blank.",
+    )
 
 
 class ProductRegisterRequestSerializer(serializers.Serializer):

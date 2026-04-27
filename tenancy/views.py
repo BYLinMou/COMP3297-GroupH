@@ -11,7 +11,7 @@ from rest_framework.response import Response
 from rest_framework.views import APIView
 
 from defects.authz import actor_from_user
-from defects.serializers import ErrorResponseSerializer
+from defects.serializers import AuthenticationErrorResponseSerializer, ErrorResponseSerializer
 
 from .models import Tenant
 from .serializers import TenantRegisterResponseSerializer, TenantRegisterSerializer
@@ -50,7 +50,10 @@ class TenantRegisterApi(APIView):
         responses={
             201: OpenApiResponse(TenantRegisterResponseSerializer, description="Tenant registered."),
             400: OpenApiResponse(ErrorResponseSerializer, description="Validation failed."),
-            403: OpenApiResponse(ErrorResponseSerializer, description="Authenticated user is not a platform admin."),
+            403: OpenApiResponse(
+                AuthenticationErrorResponseSerializer,
+                description="Authentication is missing or the authenticated user is not a platform admin.",
+            ),
             404: OpenApiResponse(ErrorResponseSerializer, description="Endpoint was called outside the public schema."),
         },
     )

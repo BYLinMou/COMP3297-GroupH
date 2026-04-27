@@ -540,6 +540,40 @@ class DefectApiClientTests(DefectApiTestCase):
         self.assertEqual(developer_resolve.status_code, 400)
         self.assertIn("Only Product Owner role can resolve", developer_resolve.json()["error"])
 
+    def test_action_endpoint_blocks_cross_product_owner_and_developer_access(self):
+        other_owner = self.create_user("owner-008", "owner008@example.com", self.owner_group)
+        other_developer = self.create_user("dev-008", "dev008@example.com", self.developer_group)
+        other_product = Product.objects.create(product_id="Prod_8", name="Cross Scope", owner_id=other_owner.username)
+        ProductDeveloper.objects.create(product=other_product, developer_id=other_developer.username)
+        other_defect = DefectReport.objects.create(
+            report_id="BT-RP-8000",
+            product=other_product,
+            version="2.0.0",
+            title="Cross product defect",
+            description="desc",
+            steps="steps",
+            tester_id="tester-cross",
+            status=DefectStatus.NEW,
+        )
+
+        wrong_owner_reject = self.api_post(
+            self.action_url(other_defect.report_id),
+            {"action": "reject"},
+            user=self.owner_user,
+        )
+        self.assertEqual(wrong_owner_reject.status_code, 400)
+        self.assertIn("Only the Product Owner can reject", wrong_owner_reject.json()["error"])
+
+        other_defect.status = DefectStatus.OPEN
+        other_defect.save(update_fields=["status"])
+        wrong_developer_take = self.api_post(
+            self.action_url(other_defect.report_id),
+            {"action": "take_ownership"},
+            user=self.dev_user,
+        )
+        self.assertEqual(wrong_developer_take.status_code, 400)
+        self.assertIn("Only developers on the product team", wrong_developer_take.json()["error"])
+
     def test_list_with_unknown_status_returns_empty_result_for_owner(self):
         response = self.api_get(
             self.list_url,

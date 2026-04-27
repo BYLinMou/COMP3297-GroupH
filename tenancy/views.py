@@ -19,8 +19,11 @@ from .services import add_tenant_domain, create_tenant_admin_user, register_tena
 from .utils import is_public_schema_context
 
 try:
-    from drf_spectacular.utils import OpenApiResponse, extend_schema
+    from drf_spectacular.utils import OpenApiExample, OpenApiResponse, extend_schema
 except Exception:  # pragma: no cover - optional dependency fallback
+    class OpenApiExample:  # type: ignore[override]
+        def __init__(self, *args, **kwargs):
+            pass
 
     class OpenApiResponse:  # type: ignore[override]
         def __init__(self, *args, **kwargs):
@@ -43,8 +46,7 @@ class TenantRegisterApi(APIView):
             "Requires Swagger Authorize/basicAuth or a valid session cookie. "
             "Only platform admins can register tenants from the public schema. "
             "In tenant mode this creates the Tenant row, primary Domain row, and PostgreSQL schema. "
-            "The request body is fully editable in Swagger UI so schema_name, domain, and name can be entered freely "
-            "for manual testing."
+            "The request example is a starter template and can be edited freely."
         ),
         request=TenantRegisterSerializer,
         responses={
@@ -56,6 +58,17 @@ class TenantRegisterApi(APIView):
             ),
             404: OpenApiResponse(ErrorResponseSerializer, description="Endpoint was called outside the public schema."),
         },
+        examples=[
+            OpenApiExample(
+                "Register tenant template",
+                value={
+                    "schema_name": "team_a",
+                    "domain": "team-a.betatrax.local",
+                    "name": "Team A",
+                },
+                request_only=True,
+            )
+        ],
     )
     def post(self, request):
         if not is_public_schema_context(request):

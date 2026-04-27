@@ -36,8 +36,12 @@ from .services import (
 )
 
 try:
-    from drf_spectacular.utils import OpenApiParameter, OpenApiResponse, extend_schema
+    from drf_spectacular.utils import OpenApiExample, OpenApiParameter, OpenApiResponse, extend_schema
 except Exception:  # pragma: no cover - optional dependency fallback
+    class OpenApiExample:  # type: ignore[override]
+        def __init__(self, *args, **kwargs):
+            pass
+
     class OpenApiParameter:  # type: ignore[override]
         QUERY = "query"
         PATH = "path"
@@ -65,7 +69,7 @@ class ProductRegisterApi(APIView):
             "Requires Swagger Authorize/basicAuth or a valid session cookie. "
             "Only Product Owners can register a product and bind developer accounts in one request. "
             "Use this endpoint to create a product visible inside the current database scope. "
-            "All request fields remain editable in Swagger UI; no preset example payload is required."
+            "The request example is a starter template and can be edited freely."
         ),
         request=ProductRegisterRequestSerializer,
         responses={
@@ -76,6 +80,17 @@ class ProductRegisterApi(APIView):
                 description="Authentication is missing or the authenticated user is not a Product Owner.",
             ),
         },
+        examples=[
+            OpenApiExample(
+                "Register product template",
+                value={
+                    "product_id": "Prod_3",
+                    "name": "BetaTrax Mobile",
+                    "developers": ["dev-004"],
+                },
+                request_only=True,
+            )
+        ],
     )
     def post(self, request):
         actor = actor_from_user(request.user)
@@ -104,7 +119,7 @@ class DefectCreateApi(APIView):
         description=(
             "Create a new defect report from an external testing system. "
             "Authentication is optional for this endpoint. "
-            "All request fields can be edited freely in Swagger UI to support ad hoc manual testing."
+            "The request example is a starter template and can be edited freely."
         ),
         request=DefectCreateRequestDocSerializer,
         responses={
@@ -115,6 +130,21 @@ class DefectCreateApi(APIView):
             ),
             404: OpenApiResponse(ErrorResponseSerializer, description="Product ID was not found."),
         },
+        examples=[
+            OpenApiExample(
+                "Submit defect template",
+                value={
+                    "product_id": "Prod_1",
+                    "version": "1.4.0",
+                    "title": "Export button fails",
+                    "description": "The export button returns a server error.",
+                    "steps": "Open reports, click Export.",
+                    "tester_id": "tester-104",
+                    "email": "tester104@example.com",
+                },
+                request_only=True,
+            )
+        ],
     )
     def post(self, request):
         serializer = DefectCreateSerializer(data=request.data)
@@ -293,8 +323,8 @@ class DefectActionApi(APIView):
             "- priority must be exactly one of P1, P2, P3.\n"
             "- backlog_ref, fix_note, retest_note, and comment are free-text fields.\n"
             "- duplicate_of should be an existing defect report ID, not a placeholder string.\n\n"
-            "Swagger UI keeps every request field editable so you can test arbitrary payload combinations instead of "
-            "starting from hard-coded examples."
+            "Swagger UI keeps every request field editable. The example payloads are starter templates and can be "
+            "modified freely for testing."
         ),
         parameters=[
             OpenApiParameter(
@@ -315,6 +345,42 @@ class DefectActionApi(APIView):
             ),
             404: OpenApiResponse(ErrorResponseSerializer, description="Defect was not found."),
         },
+        examples=[
+            OpenApiExample(
+                "Accept and open",
+                value={
+                    "action": "accept_open",
+                    "severity": "High",
+                    "priority": "P1",
+                    "backlog_ref": "BL-142",
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Mark duplicate",
+                value={
+                    "action": "duplicate",
+                    "duplicate_of": "BT-RP-1001",
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Set fixed",
+                value={
+                    "action": "set_fixed",
+                    "fix_note": "Patched null export path.",
+                },
+                request_only=True,
+            ),
+            OpenApiExample(
+                "Add comment",
+                value={
+                    "action": "add_comment",
+                    "comment": "Need logs from the failed export worker.",
+                },
+                request_only=True,
+            ),
+        ],
     )
     def post(self, request, defect_id):
         defect = DefectReport.objects.select_related("product").filter(report_id=defect_id).first()

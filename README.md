@@ -600,10 +600,9 @@ backend API endpoints:
 - Tenant registration
 - Developer effectiveness classification
 
-Swagger request bodies are intentionally left fully editable for manual testing.
-The documentation focuses on field descriptions, role rules, lifecycle
-preconditions, and response shapes instead of hard-coded example payloads that
-need to be overwritten before every test.
+Swagger request bodies stay editable for manual testing. Core write endpoints
+also provide starter example payloads in Swagger UI so reviewers can try the
+API immediately and then adjust the values as needed.
 
 Defect action documentation explains the workflow rules for `accept_open`,
 `reject`, `duplicate`, `take_ownership`, `set_fixed`, `cannot_reproduce`,

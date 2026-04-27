@@ -562,3 +562,74 @@ class TenantModeIntegrationTests(TenantTestCase):
 
         self.assertEqual(response.status_code, 201)
         self.assertEqual(response.data["tenant"]["schema_name"], "api_team")
+
+    @override_settings(
+        ALLOWED_HOSTS=["testserver", "tenant.test.com", "platform.test.com", "api-team.test.com"],
+        PUBLIC_SCHEMA_DOMAINS=["platform.test.com"],
+    )
+    def test_public_schema_registered_tenant_domain_can_use_defect_api(self):
+        with schema_context(get_public_schema_name()):
+            platform_group, _ = Group.objects.get_or_create(name=ROLE_PLATFORM_ADMIN)
+            platform_user = get_user_model().objects.create_user(
+                username="platform-e2e-admin",
+                password=self.password,
+            )
+            platform_user.groups.add(platform_group)
+
+        connection.set_schema_to_public()
+        request = APIRequestFactory().post(
+            reverse("api-tenant-register-root"),
+            {
+                "schema_name": "api_team",
+                "domain": "api-team.test.com",
+                "name": "API Team",
+            },
+            format="json",
+        )
+        request.tenant = SimpleNamespace(schema_name=get_public_schema_name())
+        force_authenticate(request, user=platform_user)
+        response = TenantRegisterApi.as_view()(request)
+        self.assertEqual(response.status_code, 201)
+
+        with schema_context("api_team"):
+            owner_group, _ = Group.objects.get_or_create(name=ROLE_OWNER)
+            developer_group, _ = Group.objects.get_or_create(name=ROLE_DEVELOPER)
+            owner = self._create_user("api-team-owner", owner_group)
+            developer = self._create_user("api-team-dev", developer_group)
+            product = Product.objects.create(
+                product_id="ApiTeamProd",
+                name="API Team Product",
+                owner_id=owner.username,
+            )
+            ProductDeveloper.objects.create(product=product, developer_id=developer.username)
+
+        create_response = self.client.post(
+            reverse("defects:api-create-defect"),
+            {
+                "product_id": "ApiTeamProd",
+                "version": "3.0.0",
+                "title": "Registered tenant defect",
+                "description": "Created via dynamically registered tenant domain",
+                "steps": "Open app and submit form",
+                "tester_id": "api-team-tester",
+            },
+            format="json",
+            HTTP_HOST="api-team.test.com",
+        )
+        self.assertEqual(create_response.status_code, 201)
+        defect_id = create_response.json()["report_id"]
+
+        self.client.force_authenticate(user=owner)
+        list_response = self.client.get(
+            reverse("defects:api-list-defects"),
+            HTTP_HOST="api-team.test.com",
+        )
+        self.assertEqual(list_response.status_code, 200)
+        self.assertTrue(any(item["report_id"] == defect_id for item in list_response.json()["items"]))
+
+        detail_response = self.client.get(
+            reverse("defects:api-defect-detail", kwargs={"defect_id": defect_id}),
+            HTTP_HOST="api-team.test.com",
+        )
+        self.assertEqual(detail_response.status_code, 200)
+        self.assertEqual(detail_response.json()["product_id"], "ApiTeamProd")

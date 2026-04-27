@@ -902,6 +902,24 @@ These tests only run when:
    - Expected:
      - response `201`
      - returned tenant schema name `api_team`
+15. `test_public_schema_registered_tenant_domain_can_use_defect_api`
+   - Public schema registers:
+     - `schema_name="api_team"`
+     - `domain="api-team.test.com"`
+     - `name="API Team"`
+   - In the newly created tenant schema:
+     - create owner `api-team-owner`
+     - create developer `api-team-dev`
+     - create product `ApiTeamProd`
+   - Then call defect APIs on `HTTP_HOST="api-team.test.com"`:
+     - create defect
+     - list defects
+     - get defect detail
+   - Expected:
+     - create returns `201`
+     - list returns `200` and contains the created defect
+     - detail returns `200`
+     - detail `product_id="ApiTeamProd"`
 
 ## Compatibility Entry Point
 
@@ -916,7 +934,7 @@ This file does not define new cases. It re-exports:
 
 Its purpose is compatibility with CI commands importing `defects.tests` directly.
 
-## Conclution
+## Conclusion
 
 The implemented automated test suite now covers:
 
@@ -926,5 +944,6 @@ The implemented automated test suite now covers:
 - endpoint negative/permission paths
 - duplicate-chain notifications
 - developer effectiveness classification paths
+- public-schema tenant registration followed by requests against the newly registered tenant domain
 
 Combined statement coverage and branch coverage are both `100.0%` across the tracked backend modules listed in the coverage report.

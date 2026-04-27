@@ -277,10 +277,7 @@ class DefectActionApi(APIView):
         summary="Apply workflow action to a defect",
         description=(
             "Requires Swagger Authorize/basicAuth or a valid session cookie. "
-            "Apply one lifecycle or comment action to a defect. "
-            "Supported actions: "
-            + ", ".join(DEFECT_ACTION_CHOICES)
-            + ". Role and status rules are enforced.\n\n"
+            "Apply one lifecycle or comment action to a defect.\n\n"
             "Action-specific payload rules:\n"
             "- accept_open: Product Owner only; valid when status is New; requires severity and priority; backlog_ref optional.\n"
             "- reject: Product Owner only; valid when status is New.\n"

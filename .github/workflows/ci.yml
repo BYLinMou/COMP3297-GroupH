@@ -57,10 +57,10 @@ jobs:
         run: python manage.py test defects.tests --verbosity 2
 
       - name: Run branch coverage
-        run: python -m coverage run --branch manage.py test
+        run: python -m coverage run --branch --omit=*/migrations/*,tenancy/test_tenant_mode_integration.py,betatrax/suite_tenant_mode.py,manage.py,*/asgi.py,*/wsgi.py manage.py test betatrax.suite_single_schema --verbosity 2
 
       - name: Print coverage summary
-        run: python -m coverage report
+        run: python -m coverage report --fail-under=100
 
       - name: Export coverage artifacts
         run: |
@@ -120,7 +120,7 @@ jobs:
         run: python manage.py check
 
       - name: Run tenant-mode test suite with branch coverage
-        run: python -m coverage run --branch --source=tenancy manage.py test --verbosity 2
+        run: python -m coverage run --branch --source=tenancy --omit=*/migrations/*,tenancy/tests.py,manage.py,*/asgi.py,*/wsgi.py manage.py test betatrax.suite_tenant_mode --verbosity 2
 
       - name: Print tenant-mode coverage summary
         run: python -m coverage report --fail-under=100

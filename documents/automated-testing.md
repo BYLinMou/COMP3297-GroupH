@@ -17,8 +17,8 @@ Non-tenant SQLite job:
 - `python manage.py test defects.testsuite.test_views_request_factory --verbosity 2`
 - `python manage.py test defects.testsuite.test_effectiveness --verbosity 2`
 - `python manage.py test defects.tests --verbosity 2`
-- `python -m coverage run --branch manage.py test`
-- `python -m coverage report`
+- `python -m coverage run --branch --omit=*/migrations/*,tenancy/test_tenant_mode_integration.py,betatrax/suite_tenant_mode.py,manage.py,*/asgi.py,*/wsgi.py manage.py test betatrax.suite_single_schema --verbosity 2`
+- `python -m coverage report --fail-under=100`
 - `python -m coverage xml -o coverage.xml`
 - `python -m coverage html`
 
@@ -28,7 +28,7 @@ Tenant-mode PostgreSQL job:
 - Sets `ENABLE_DJANGO_TENANTS=True`
 - Uses `django_tenants.postgresql_backend`
 - Runs `python manage.py check`
-- Runs `python -m coverage run --branch --source=tenancy manage.py test --verbosity 2`
+- Runs `python -m coverage run --branch --source=tenancy --omit=*/migrations/*,tenancy/tests.py,manage.py,*/asgi.py,*/wsgi.py manage.py test betatrax.suite_tenant_mode --verbosity 2`
 - Runs `python -m coverage report --fail-under=100`
 - Exports `tenant-coverage.xml` and `tenant-htmlcov/`
 
@@ -60,10 +60,10 @@ Add new Sprint 3 endpoint tests by extending `DefectApiTestCase` instead of dupl
 
 ## Commands
 
-Run all tests:
+Run the single-schema suite:
 
 ```powershell
-python manage.py test --verbosity 2
+python manage.py test betatrax.suite_single_schema --verbosity 2
 ```
 
 Run unit/service and frontend tests explicitly:
@@ -99,8 +99,8 @@ python manage.py test defects.tests --verbosity 2
 Run tests with branch coverage:
 
 ```powershell
-python -m coverage run --branch manage.py test
-python -m coverage report
+python -m coverage run --branch --omit=*/migrations/*,tenancy/test_tenant_mode_integration.py,betatrax/suite_tenant_mode.py,manage.py,*/asgi.py,*/wsgi.py manage.py test betatrax.suite_single_schema --verbosity 2
+python -m coverage report --fail-under=100
 python -m coverage xml -o coverage.xml
 python -m coverage html
 ```
@@ -110,17 +110,16 @@ Run the tenant-mode integration suite against PostgreSQL:
 ```powershell
 $env:ENABLE_DJANGO_TENANTS='True'
 $env:DATABASE_URL='postgresql://postgres:postgres@127.0.0.1:5432/betatrax'
-python -m coverage run --branch --source=tenancy manage.py test --verbosity 2
+python -m coverage run --branch --source=tenancy --omit=*/migrations/*,tenancy/tests.py,manage.py,*/asgi.py,*/wsgi.py manage.py test betatrax.suite_tenant_mode --verbosity 2
 python -m coverage report --fail-under=100
 python -m coverage xml -o tenant-coverage.xml
 python -m coverage html -d tenant-htmlcov
 ```
 
-In tenant mode, legacy single-schema defect API, service, request-factory, and
-frontend smoke tests are skipped because their fixtures intentionally create
-tenant-scoped models directly in the active schema. The tenant-mode integration
-tests use `django_tenants.test.TenantTestCase` and create data inside a real
-test tenant schema instead.
+CI separates suite entrypoints by execution mode: `betatrax.suite_single_schema`
+runs the SQLite/non-tenant tests, and `betatrax.suite_tenant_mode` runs the
+PostgreSQL tenant integration tests. Together they cover all test files without
+discovering mode-incompatible tests in either job.
 
 Run a tenant-mode configuration check against PostgreSQL:
 

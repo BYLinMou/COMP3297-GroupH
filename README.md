@@ -39,14 +39,14 @@ Runs on every push and pull request (except changes only in `README.md` / `AGENT
   - `python manage.py test defects.testsuite.test_views_request_factory --verbosity 2`
   - `python manage.py test defects.testsuite.test_effectiveness --verbosity 2`
   - `python manage.py test defects.tests --verbosity 2`
-  - `python -m coverage run --branch manage.py test`
-  - `python -m coverage report`
+  - `python -m coverage run --branch --omit=*/migrations/*,tenancy/test_tenant_mode_integration.py,betatrax/suite_tenant_mode.py,manage.py,*/asgi.py,*/wsgi.py manage.py test betatrax.suite_single_schema --verbosity 2`
+  - `python -m coverage report --fail-under=100`
   - `python -m coverage xml -o coverage.xml`
   - `python -m coverage html`
 
 - `tenant-mode-tests` (tenant mode, PostgreSQL):
   - `python manage.py check`
-  - `python -m coverage run --branch --source=tenancy manage.py test --verbosity 2`
+  - `python -m coverage run --branch --source=tenancy --omit=*/migrations/*,tenancy/tests.py,manage.py,*/asgi.py,*/wsgi.py manage.py test betatrax.suite_tenant_mode --verbosity 2`
   - `python -m coverage report --fail-under=100`
   - `python -m coverage xml -o tenant-coverage.xml`
   - `python -m coverage html -d tenant-htmlcov`
@@ -278,16 +278,16 @@ python manage.py test defects.testsuite.test_api_client --verbosity 2
 python manage.py test defects.testsuite.test_views_request_factory --verbosity 2
 python manage.py test defects.testsuite.test_effectiveness --verbosity 2
 python manage.py test defects.tests --verbosity 2
-python -m coverage run --branch manage.py test
-python -m coverage report
+python -m coverage run --branch --omit=*/migrations/*,tenancy/test_tenant_mode_integration.py,betatrax/suite_tenant_mode.py,manage.py,*/asgi.py,*/wsgi.py manage.py test betatrax.suite_single_schema --verbosity 2
+python -m coverage report --fail-under=100
 python -m coverage xml -o coverage.xml
 python -m coverage html
 ```
 
-Run the full discovered non-tenant suite:
+Run the single-schema suite without discovering tenant-mode integration tests:
 
 ```bash
-python manage.py test --verbosity 2
+python manage.py test betatrax.suite_single_schema --verbosity 2
 ```
 
 Run focused test layers:
@@ -304,8 +304,8 @@ python manage.py test defects.tests --verbosity 2
 Run branch coverage and generate reports:
 
 ```bash
-python -m coverage run --branch manage.py test
-python -m coverage report
+python -m coverage run --branch --omit=*/migrations/*,tenancy/test_tenant_mode_integration.py,betatrax/suite_tenant_mode.py,manage.py,*/asgi.py,*/wsgi.py manage.py test betatrax.suite_single_schema --verbosity 2
+python -m coverage report --fail-under=100
 python -m coverage xml -o coverage.xml
 python -m coverage html
 ```
@@ -316,7 +316,7 @@ Run the tenant-mode integration suite (requires PostgreSQL and `django-tenants`)
 export ENABLE_DJANGO_TENANTS=True
 export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/betatrax
 python manage.py check
-python -m coverage run --branch --source=tenancy manage.py test --verbosity 2
+python -m coverage run --branch --source=tenancy --omit=*/migrations/*,tenancy/tests.py,manage.py,*/asgi.py,*/wsgi.py manage.py test betatrax.suite_tenant_mode --verbosity 2
 python -m coverage report --fail-under=100
 python -m coverage xml -o tenant-coverage.xml
 python -m coverage html -d tenant-htmlcov
@@ -871,12 +871,10 @@ The following limitations are present in the current Sprint 3 implementation:
 7. Generated API documentation is available only when `drf-spectacular` is installed.
   Without it, the core API still works but `/api/schema/` and `/api/docs/` are not exposed.
 
-8. Tenant-mode tests are split from the single-schema regression suite. With
-   `ENABLE_DJANGO_TENANTS=True`, tenant integration tests create a real test
-   tenant schema and verify tenant-scoped defect API access plus public-schema
-   tenant registration. Legacy single-schema defect/frontend tests are skipped
-   in that mode because their fixtures intentionally create tenant-scoped models
-   directly in the active schema.
+8. Tenant-mode tests are split from the single-schema regression suite. CI runs
+   `betatrax.suite_single_schema` in SQLite mode and `betatrax.suite_tenant_mode`
+   in PostgreSQL tenant mode, so each test file runs in its intended mode without
+   expected skip noise.
 
 </details>
 

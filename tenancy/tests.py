@@ -380,11 +380,11 @@ class PlatformTenantConsoleTests(TestCase):
         self.assertEqual(create_response.status_code, 302)
         tenant = Tenant.objects.get(schema_name="team_blue")
         self.assertTrue(Domain.objects.filter(domain="team-blue.example.com", tenant=tenant).exists())
-        if settings.USE_DJANGO_TENANTS:
+        if settings.USE_DJANGO_TENANTS:  # pragma: no cover
             with schema_context(tenant.schema_name):
                 admin = self.user_model.objects.get(username="team-blue-admin")
         else:
-            admin = self.user_model.objects.get(username="team-blue-admin")
+            admin = self.user_model.objects.get(username="team-blue-admin")  # pragma: no cover
         self.assertTrue(admin.is_staff)
         self.assertTrue(admin.is_superuser)
 

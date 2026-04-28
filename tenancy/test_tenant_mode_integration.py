@@ -65,6 +65,12 @@ class TenantModeIntegrationTests(TenantTestCase):
         user.groups.add(group)
         return user
 
+    def test_create_user_reuses_existing_tenant_user(self):
+        reused = self._create_user(self.owner.username, self.developer_group)
+
+        self.assertEqual(reused.pk, self.owner.pk)
+        self.assertTrue(reused.groups.filter(name=ROLE_DEVELOPER).exists())
+
     def _create_defect(self, title="Tenant scoped bug", tester_id="tenant-tester", email=""):
         response = self.client.post(
             reverse("defects:api-create-defect"),

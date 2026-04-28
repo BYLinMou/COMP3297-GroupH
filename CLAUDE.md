@@ -24,38 +24,20 @@ python manage.py check
 python manage.py makemigrations --check --dry-run
 ```
 
-**Run all non-tenant tests (single-schema, SQLite):**
+**Run all tests (single-schema, SQLite, ignores .env database settings):**
 ```bash
-python manage.py test betatrax.suite_single_schema --verbosity 2
-```
-
-**Run a focused test layer:**
-```bash
-python manage.py test defects.testsuite.test_services --verbosity 2
-python manage.py test defects.testsuite.test_api_client --verbosity 2
-python manage.py test defects.testsuite.test_views_request_factory --verbosity 2
-python manage.py test defects.testsuite.test_effectiveness --verbosity 2
-python manage.py test frontend.tests --verbosity 2
+python manage.py test --settings=betatrax.settings_test defects.tests --verbosity 2
 ```
 
 **Run a single test method:**
 ```bash
-python manage.py test defects.testsuite.test_services.ServiceLayerTests.test_create_defect --verbosity 2
+python manage.py test --settings=betatrax.settings_test defects.tests.EffectivenessClassificationTests.test_good --verbosity 2
 ```
 
-**Run branch coverage and verify the 100% gate (required by course):**
+**Run branch coverage for the effectiveness classifier (required by course):**
 ```bash
-python -m coverage run --branch --omit=*/migrations/*,tenancy/test_tenant_mode_integration.py,betatrax/suite_tenant_mode.py,manage.py,*/asgi.py,*/wsgi.py manage.py test betatrax.suite_single_schema --verbosity 2
-python -m coverage report --fail-under=100
-python -m coverage html
-```
-
-**Run tenant-mode tests (requires PostgreSQL and `ENABLE_DJANGO_TENANTS=True`):**
-```bash
-export ENABLE_DJANGO_TENANTS=True
-export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/betatrax
-python -m coverage run --branch --source=tenancy --omit=*/migrations/*,tenancy/tests.py,manage.py,*/asgi.py,*/wsgi.py manage.py test betatrax.suite_tenant_mode --verbosity 2
-python -m coverage report --fail-under=100
+python -m coverage run --branch --source=defects.effectiveness manage.py test --settings=betatrax.settings_test defects.tests.EffectivenessClassificationTests --verbosity 2
+python -m coverage report
 ```
 
 **Apply migrations:**

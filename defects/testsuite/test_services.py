@@ -129,6 +129,14 @@ class DefectServiceTests(TestCase):
         self.assertEqual(history.to_status, DefectStatus.NEW)
         self.assertEqual(history.actor_id, "tester-002")
 
+    def test_service_fixture_create_user_reuses_existing_user(self):
+        created = self.create_user("helper-user", "helper@example.com", self.owner_group)
+        reused = self.create_user("helper-user", "helper@example.com", self.developer_group)
+
+        self.assertEqual(reused.pk, created.pk)
+        self.assertTrue(reused.groups.filter(name=ROLE_OWNER).exists())
+        self.assertTrue(reused.groups.filter(name=ROLE_DEVELOPER).exists())
+
     def test_next_report_id_skips_invalid_report_identifiers(self):
         DefectReport.objects.create(
             report_id="LEGACY-ID",

@@ -50,14 +50,17 @@ jobs:
       - name: Run direct view tests with APIRequestFactory
         run: python manage.py test defects.testsuite.test_views_request_factory --verbosity 2
 
+      - name: Run developer effectiveness tests
+        run: python manage.py test defects.testsuite.test_effectiveness --verbosity 2
+
       - name: Verify defects.tests compatibility entrypoint
         run: python manage.py test defects.tests --verbosity 2
 
       - name: Run branch coverage
-        run: python -m coverage run --branch manage.py test
+        run: python -m coverage run --branch --omit=*/migrations/*,tenancy/test_tenant_mode_integration.py,betatrax/suite_tenant_mode.py,manage.py,*/asgi.py,*/wsgi.py manage.py test betatrax.suite_single_schema --verbosity 2
 
       - name: Print coverage summary
-        run: python -m coverage report
+        run: python -m coverage report --fail-under=100
 
       - name: Export coverage artifacts
         run: |
@@ -116,5 +119,21 @@ jobs:
       - name: Django tenant-mode system check
         run: python manage.py check
 
-      - name: Run tenant-mode test suite
-        run: python manage.py test --verbosity 2
+      - name: Run tenant-mode test suite with branch coverage
+        run: python -m coverage run --branch --source=tenancy --omit=*/migrations/*,tenancy/tests.py,manage.py,*/asgi.py,*/wsgi.py manage.py test betatrax.suite_tenant_mode --verbosity 2
+
+      - name: Print tenant-mode coverage summary
+        run: python -m coverage report --fail-under=100
+
+      - name: Export tenant-mode coverage artifacts
+        run: |
+          python -m coverage xml -o tenant-coverage.xml
+          python -m coverage html -d tenant-htmlcov
+
+      - name: Upload tenant-mode coverage artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: tenant-coverage-report
+          path: |
+            tenant-coverage.xml
+            tenant-htmlcov/

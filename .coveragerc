@@ -6,9 +6,6 @@ source =
     tenancy
 omit =
     */migrations/*
-    */test_*.py
-    */tests.py
-    */testsuite/*
     manage.py
     */asgi.py
     */wsgi.py

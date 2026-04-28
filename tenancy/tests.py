@@ -20,7 +20,7 @@ from defects.models import Product
 from .middleware import PublicDomainTenantMiddleware
 from .admin import DomainAdmin, TenantAdmin
 from .models import Domain, Tenant
-from .services import add_tenant_domain, create_tenant_admin_user
+from .services import add_tenant_domain, create_tenant_admin_user, register_tenant
 from .utils import is_public_schema_context
 from .views import TenantRegisterApi, platform_tenant_list
 
@@ -124,6 +124,53 @@ class TenantRegisterSchemaGuardTests(TestCase):
         self.assertEqual(response.status_code, 404)
         self.assertIn("public schema", response.data["error"])
 
+    @override_settings(USE_DJANGO_TENANTS=True)
+    def test_register_tenant_api_rejects_non_platform_admin_in_public_schema(self):
+        user = get_user_model().objects.create_user(username="tenant-viewer", password="Pass1234!")
+        request = self.factory.post(
+            reverse("api-tenant-register-root"),
+            {"schema_name": "team_x", "domain": "team-x.example.com"},
+            format="json",
+        )
+        request.tenant = SimpleNamespace(schema_name="public")
+        force_authenticate(request, user=user)
+
+        response = TenantRegisterApi.as_view()(request)
+
+        self.assertEqual(response.status_code, 403)
+        self.assertIn("Only platform admins", response.data["error"])
+
+    @override_settings(USE_DJANGO_TENANTS=True)
+    def test_register_tenant_api_rejects_serializer_errors_in_public_schema(self):
+        request = self.factory.post(
+            reverse("api-tenant-register-root"),
+            {"schema_name": "team_x"},
+            format="json",
+        )
+        request.tenant = SimpleNamespace(schema_name="public")
+        force_authenticate(request, user=self.admin_user)
+
+        response = TenantRegisterApi.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("domain", response.data["error"])
+
+    @override_settings(USE_DJANGO_TENANTS=True)
+    def test_register_tenant_api_returns_service_validation_error(self):
+        Tenant.objects.create(schema_name="team_x", domain="team-x.example.com")
+        request = self.factory.post(
+            reverse("api-tenant-register-root"),
+            {"schema_name": "team_x", "domain": "team-y.example.com"},
+            format="json",
+        )
+        request.tenant = SimpleNamespace(schema_name="public")
+        force_authenticate(request, user=self.admin_user)
+
+        response = TenantRegisterApi.as_view()(request)
+
+        self.assertEqual(response.status_code, 400)
+        self.assertEqual(response.data["error"], "schema_name already exists.")
+
 
 class TenantSchemaUtilityTests(TestCase):
     @override_settings(USE_DJANGO_TENANTS=True)
@@ -173,6 +220,37 @@ class TenantDomainServiceTests(TestCase):
     def setUp(self):
         self.user_model = get_user_model()
         self.tenant = Tenant.objects.create(schema_name="team_a", domain="team-a.example.com")
+
+    def test_tenant_string_representation_includes_schema_and_domain(self):
+        self.assertEqual(str(self.tenant), "team_a (team-a.example.com)")
+
+    def test_register_tenant_validation_branches(self):
+        cases = [
+            ("", "team-b.example.com", "schema_name cannot be empty."),
+            ("public", "team-b.example.com", "schema_name cannot use reserved names."),
+            ("1bad", "team-b.example.com", "Invalid schema_name format"),
+            ("team_b", "", "domain cannot be empty."),
+            ("team_b", "invalid_domain", "Invalid domain format"),
+            ("team_a", "team-b.example.com", "schema_name already exists."),
+            ("team_b", "team-a.example.com", "domain already exists."),
+        ]
+
+        for schema_name, domain, expected_message in cases:
+            with self.subTest(schema_name=schema_name, domain=domain):
+                with self.assertRaisesMessage(Exception, expected_message):
+                    register_tenant(schema_name, domain)
+
+        existing_domain_tenant = Tenant.objects.create(
+            schema_name="team_domain",
+            domain="team-domain.example.com",
+        )
+        Domain.objects.create(
+            domain="bugs.team-domain.example.com",
+            tenant=existing_domain_tenant,
+            is_primary=False,
+        )
+        with self.assertRaisesMessage(Exception, "domain already exists."):
+            register_tenant("team_c", "bugs.team-domain.example.com")
 
     def test_add_tenant_domain_validates_and_persists(self):
         with self.assertRaisesMessage(Exception, "domain cannot be empty."):
@@ -302,11 +380,11 @@ class PlatformTenantConsoleTests(TestCase):
         self.assertEqual(create_response.status_code, 302)
         tenant = Tenant.objects.get(schema_name="team_blue")
         self.assertTrue(Domain.objects.filter(domain="team-blue.example.com", tenant=tenant).exists())
-        if settings.USE_DJANGO_TENANTS:
+        if settings.USE_DJANGO_TENANTS:  # pragma: no cover
             with schema_context(tenant.schema_name):
                 admin = self.user_model.objects.get(username="team-blue-admin")
         else:
-            admin = self.user_model.objects.get(username="team-blue-admin")
+            admin = self.user_model.objects.get(username="team-blue-admin")  # pragma: no cover
         self.assertTrue(admin.is_staff)
         self.assertTrue(admin.is_superuser)
 

@@ -10,9 +10,10 @@ Start here for deeper project details:
 
 - [System architecture](documents/system-architecture.md)
 - [Automated testing](documents/automated-testing.md)
+- [Test case inventory](documents/testcase.md)
 - [Tenant usage](documents/tenant-usage.md)
 
-## Demo Website
+## Demo Website (Tenant Mode)
 
 - Demo website (public schema): [betatrax.zeabur.app](https://betatrax.zeabur.app)
 - Demo website (public schema) 2 (backup): [betatrax.yeelam.site](https://betatrax.yeelam.site)
@@ -28,20 +29,29 @@ Start here for deeper project details:
 This repository currently uses three GitHub Actions workflows:
 
 1. **CI check** (`.github/workflows/ci.yml`)
-Runs on every push and pull request to validate functionality with:
-- `python manage.py check`
-- `python manage.py makemigrations --check --dry-run`
-- `python manage.py test defects.testsuite.test_services frontend.tests --verbosity 2`
-- `python manage.py test defects.testsuite.test_api_client --verbosity 2`
-- `python manage.py test defects.testsuite.test_views_request_factory --verbosity 2`
-- `python manage.py test --verbosity 2`
-- `python manage.py test defects.tests --verbosity 2`
-- `python -m coverage run --branch manage.py test`
-- `python -m coverage report`
-- `python -m coverage xml -o coverage.xml`
-- `python -m coverage html`
+Runs on every push and pull request (except changes only in `README.md` / `AGENTS.md`) and contains two jobs:
 
-The CI workflow uploads `coverage.xml` and `htmlcov/` as a `coverage-report` artifact.
+- `django-checks` (non-tenant, SQLite):
+  - `python manage.py check`
+  - `python manage.py makemigrations --check --dry-run`
+  - `python manage.py test defects.testsuite.test_services frontend.tests --verbosity 2`
+  - `python manage.py test defects.testsuite.test_api_client --verbosity 2`
+  - `python manage.py test defects.testsuite.test_views_request_factory --verbosity 2`
+  - `python manage.py test defects.testsuite.test_effectiveness --verbosity 2`
+  - `python manage.py test defects.tests --verbosity 2`
+  - `python -m coverage run --branch --omit=*/migrations/*,tenancy/test_tenant_mode_integration.py,betatrax/suite_tenant_mode.py,manage.py,*/asgi.py,*/wsgi.py manage.py test betatrax.suite_single_schema --verbosity 2`
+  - `python -m coverage report --fail-under=100`
+  - `python -m coverage xml -o coverage.xml`
+  - `python -m coverage html`
+
+- `tenant-mode-tests` (tenant mode, PostgreSQL):
+  - `python manage.py check`
+  - `python -m coverage run --branch --source=tenancy --omit=*/migrations/*,tenancy/tests.py,manage.py,*/asgi.py,*/wsgi.py manage.py test betatrax.suite_tenant_mode --verbosity 2`
+  - `python -m coverage report --fail-under=100`
+  - `python -m coverage xml -o tenant-coverage.xml`
+  - `python -m coverage html -d tenant-htmlcov`
+
+The CI workflow uploads `coverage.xml` and `htmlcov/` as a `coverage-report` artifact, and uploads tenant-mode coverage as `tenant-coverage-report`.
 This is the current Sprint 3 automated testing baseline.
 
 2. **Auto Release** (`.github/workflows/auto-release.yml`)
@@ -231,7 +241,10 @@ accounts when creating new tenants.
 
 ## Automated Testing
 
-Sprint 3 testing now uses Django's built-in test runner, Django REST Framework test utilities, and `coverage.py`.
+Sprint 3 testing uses Django's built-in test runner, Django REST Framework test utilities, and `coverage.py`.
+
+For a concrete inventory of implemented test cases, see [documents/testcase.md](documents/testcase.md).
+For CI details and testing conventions, see [documents/automated-testing.md](documents/automated-testing.md).
 
 ### Test layout
 
@@ -245,55 +258,68 @@ Sprint 3 testing now uses Django's built-in test runner, Django REST Framework t
   Service-layer tests for status transition and registration logic
 - `defects/testsuite/test_effectiveness.py`
   Branch/statement coverage tests for developer effectiveness classification rules
+- `betatrax/test_api_schema.py`
+  OpenAPI schema regression tests (operation IDs / enums / response schema shape)
+- `tenancy/test_tenant_mode_integration.py`
+  Tenant-mode integration tests (PostgreSQL + `django-tenants`) for tenant registration and tenant-scoped defect API access
 - `frontend/tests.py`
   Smoke tests for key HTML flows
 
 <details>
 <summary><strong>Local commands</strong></summary>
 
-Run the full discovered suite:
+Run the same non-tenant checks used by the CI `django-checks` job:
 
 ```bash
-python manage.py test --verbosity 2
+python manage.py check
+python manage.py makemigrations --check --dry-run
+python manage.py test defects.testsuite.test_services frontend.tests --verbosity 2
+python manage.py test defects.testsuite.test_api_client --verbosity 2
+python manage.py test defects.testsuite.test_views_request_factory --verbosity 2
+python manage.py test defects.testsuite.test_effectiveness --verbosity 2
+python manage.py test defects.tests --verbosity 2
+python -m coverage run --branch --omit=*/migrations/*,tenancy/test_tenant_mode_integration.py,betatrax/suite_tenant_mode.py,manage.py,*/asgi.py,*/wsgi.py manage.py test betatrax.suite_single_schema --verbosity 2
+python -m coverage report --fail-under=100
+python -m coverage xml -o coverage.xml
+python -m coverage html
 ```
 
-Run the unit/frontend layer explicitly:
+Run the single-schema suite without discovering tenant-mode integration tests:
+
+```bash
+python manage.py test betatrax.suite_single_schema --verbosity 2
+```
+
+Run focused test layers:
 
 ```bash
 python manage.py test defects.testsuite.test_services frontend.tests --verbosity 2
-```
-
-Run endpoint tests with DRF `APIClient`:
-
-```bash
 python manage.py test defects.testsuite.test_api_client --verbosity 2
-```
-
-Run direct view tests with `APIRequestFactory`:
-
-```bash
 python manage.py test defects.testsuite.test_views_request_factory --verbosity 2
-```
-
-Run effectiveness classification tests explicitly:
-
-```bash
 python manage.py test defects.testsuite.test_effectiveness --verbosity 2
-```
-
-Run the compatibility entrypoint explicitly:
-
-```bash
+python manage.py test betatrax.test_api_schema --verbosity 2
 python manage.py test defects.tests --verbosity 2
 ```
 
 Run branch coverage and generate reports:
 
 ```bash
-python -m coverage run --branch manage.py test
-python -m coverage report
+python -m coverage run --branch --omit=*/migrations/*,tenancy/test_tenant_mode_integration.py,betatrax/suite_tenant_mode.py,manage.py,*/asgi.py,*/wsgi.py manage.py test betatrax.suite_single_schema --verbosity 2
+python -m coverage report --fail-under=100
 python -m coverage xml -o coverage.xml
 python -m coverage html
+```
+
+Run the tenant-mode integration suite (requires PostgreSQL and `django-tenants`):
+
+```bash
+export ENABLE_DJANGO_TENANTS=True
+export DATABASE_URL=postgresql://postgres:postgres@127.0.0.1:5432/betatrax
+python manage.py check
+python -m coverage run --branch --source=tenancy --omit=*/migrations/*,tenancy/tests.py,manage.py,*/asgi.py,*/wsgi.py manage.py test betatrax.suite_tenant_mode --verbosity 2
+python -m coverage report --fail-under=100
+python -m coverage xml -o tenant-coverage.xml
+python -m coverage html -d tenant-htmlcov
 ```
 
 Coverage configuration is stored in `.coveragerc`.
@@ -301,8 +327,8 @@ Generated artifacts are:
 
 - `coverage.xml`
 - `htmlcov/index.html`
-
-For implementation details and conventions, see [documents/automated-testing.md](documents/automated-testing.md).
+- `tenant-coverage.xml`
+- `tenant-htmlcov/index.html`
 
 </details>
 
@@ -845,12 +871,10 @@ The following limitations are present in the current Sprint 3 implementation:
 7. Generated API documentation is available only when `drf-spectacular` is installed.
   Without it, the core API still works but `/api/schema/` and `/api/docs/` are not exposed.
 
-8. Tenant-mode tests are split from the single-schema regression suite. With
-   `ENABLE_DJANGO_TENANTS=True`, tenant integration tests create a real test
-   tenant schema and verify tenant-scoped defect API access plus public-schema
-   tenant registration. Legacy single-schema defect/frontend tests are skipped
-   in that mode because their fixtures intentionally create tenant-scoped models
-   directly in the active schema.
+8. Tenant-mode tests are split from the single-schema regression suite. CI runs
+   `betatrax.suite_single_schema` in SQLite mode and `betatrax.suite_tenant_mode`
+   in PostgreSQL tenant mode, so each test file runs in its intended mode without
+   expected skip noise.
 
 </details>
 

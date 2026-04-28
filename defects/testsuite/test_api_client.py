@@ -8,6 +8,12 @@ from .base import DefectApiTestCase
 
 @skipIf(settings.USE_DJANGO_TENANTS, "Single-schema API regression tests run with ENABLE_DJANGO_TENANTS=False.")
 class DefectApiClientTests(DefectApiTestCase):
+    def test_api_fixture_create_user_updates_existing_email(self):
+        user = self.create_user("owner-001", "owner-updated@example.com", self.owner_group)
+
+        self.assertEqual(user.pk, self.owner_user.pk)
+        self.assertEqual(user.email, "owner-updated@example.com")
+
     def test_submit_defect_invalid_email_returns_serializer_error(self):
         response = self.api_post(
             self.create_url,

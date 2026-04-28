@@ -482,15 +482,8 @@ def summarize_developer_effectiveness(owner_id: str, developer_id: str) -> dict[
         product__owner_id=normalized_owner,
         assignee_id=normalized_developer,
     )
-    fixed_count = DefectStatusHistory.objects.filter(
-        defect__in=owner_defects,
-        to_status=DefectStatus.FIXED,
-        actor_id=normalized_developer,
-    ).count()
-    reopened_count = DefectStatusHistory.objects.filter(
-        defect__in=owner_defects,
-        to_status=DefectStatus.REOPENED,
-    ).count()
+    fixed_count = owner_defects.filter(status=DefectStatus.FIXED).count()
+    reopened_count = owner_defects.filter(status=DefectStatus.REOPENED).count()
 
     classification = classify_developer(fixed_count, reopened_count)
     ratio = (reopened_count / fixed_count) if fixed_count else None
